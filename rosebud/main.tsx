@@ -17,7 +17,7 @@ import AudioPlayer from '@deities/ui/AudioPlayer.tsx';
 import initializeCSS from '@deities/ui/CSS.tsx';
 import { initializeCSSVariables } from '@deities/ui/cssVar.tsx';
 import { AlertContext } from '@deities/ui/hooks/useAlert.tsx';
-import { ScaleContext } from '@deities/ui/hooks/useScale.tsx';
+import useScale, { ScaleContext } from '@deities/ui/hooks/useScale.tsx';
 import { VisibilityStateContext } from '@nkzw/use-visibility-state';
 import { useCallback, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -39,7 +39,7 @@ const currentDemoMap = convertBiome(demo1, Biome.Grassland);
 
 function PlaygroundGame({ map, metadata }: { map: MapData; metadata?: MapMetadata }) {
   const [renderKey, setRenderKey] = useState(0);
-  const zoom = 1;
+  const zoom = useScale();
 
   const [game, setGame, undo] = useClientGame(
     map,
