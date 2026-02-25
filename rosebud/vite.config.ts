@@ -9,11 +9,13 @@ const root = resolve(__dirname, '..');
 
 export default defineConfig({
   root: __dirname,
+  base: './',
   publicDir: resolve(__dirname, 'public'),
   build: {
     outDir: resolve(__dirname, 'dist'),
     target: 'esnext',
     emptyOutDir: true,
+    assetsDir: 'static',
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
