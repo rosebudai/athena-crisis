@@ -1,0 +1,27 @@
+@font-face {
+  font-display: swap;
+  font-family: Athena;
+  src: url('/fonts/AthenaNova.woff2');
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #1b1b23;
+  font-family: Athena, ui-sans-serif, system-ui, sans-serif;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}

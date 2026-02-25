@@ -14,6 +14,7 @@ packages:
   - hermes
   - i18n
   - offline
+  - rosebud
   - scripts
   - tests
   - ui
