@@ -12,6 +12,7 @@ import {
   generateRandomMap,
   generateSea,
 } from '@deities/athena/generator/MapGenerator.tsx';
+import { SongName } from '@deities/athena/info/Music.tsx';
 import convertBiome from '@deities/athena/lib/convertBiome.tsx';
 import { Biome } from '@deities/athena/map/Biome.tsx';
 import { PlainMap } from '@deities/athena/map/PlainMap.tsx';
@@ -58,6 +59,21 @@ AudioPlayer.resume();
 AudioPlayer.preload();
 
 const startAction = { type: 'Start' } as const;
+const MENU_SONG: SongName = 'menu-theme';
+
+// Helper to play menu SFX
+const playMenuSound = (
+  name:
+    | 'UI/Accept'
+    | 'UI/Cancel'
+    | 'UI/Start'
+    | 'UI/Next'
+    | 'Menu/Save'
+    | 'Menu/Load'
+    | 'Menu/Transition',
+) => {
+  AudioPlayer.playSound(name);
+};
 
 // --- Save/Load ---
 
@@ -735,21 +751,45 @@ function TitleScreen({
       <h1 className={titleStyle}>Athena Crisis</h1>
       <p className={subtitleStyle}>Turn-Based Strategy</p>
       {hasAutoSave && (
-        <button className={buttonStyle} onClick={onContinue} style={{ marginBottom: 12 }}>
+        <button
+          className={buttonStyle}
+          onClick={() => {
+            playMenuSound('UI/Start');
+            onContinue();
+          }}
+          style={{ marginBottom: 12 }}
+        >
           Continue
         </button>
       )}
       <button
         className={hasAutoSave ? secondaryButtonStyle : buttonStyle}
-        onClick={onPlay}
+        onClick={() => {
+          playMenuSound('Menu/Transition');
+          onPlay();
+        }}
         style={hasAutoSave ? { marginBottom: 12 } : undefined}
       >
         {hasAutoSave ? 'New Game' : 'Play'}
       </button>
-      <button className={secondaryButtonStyle} onClick={onLoadGame} style={{ marginTop: 4 }}>
+      <button
+        className={secondaryButtonStyle}
+        onClick={() => {
+          playMenuSound('Menu/Transition');
+          onLoadGame();
+        }}
+        style={{ marginTop: 4 }}
+      >
         Load Game
       </button>
-      <button className={secondaryButtonStyle} onClick={onHowToPlay} style={{ marginTop: 4 }}>
+      <button
+        className={secondaryButtonStyle}
+        onClick={() => {
+          playMenuSound('Menu/Transition');
+          onHowToPlay();
+        }}
+        style={{ marginTop: 4 }}
+      >
         How to Play
       </button>
     </div>
@@ -790,7 +830,13 @@ function HowToPlay({ onBack }: { onBack: () => void }) {
           Move infantry onto enemy buildings to capture them.
         </li>
       </ul>
-      <button className={secondaryButtonStyle} onClick={onBack}>
+      <button
+        className={secondaryButtonStyle}
+        onClick={() => {
+          playMenuSound('UI/Cancel');
+          onBack();
+        }}
+      >
         Back
       </button>
     </div>
@@ -827,14 +873,28 @@ function SlotPicker({
               );
             }
             return (
-              <div key={key} className={slotCardEmptyStyle} onClick={() => onSelect(key)}>
+              <div
+                key={key}
+                className={slotCardEmptyStyle}
+                onClick={() => {
+                  playMenuSound('UI/Accept');
+                  onSelect(key);
+                }}
+              >
                 <span>{label} -- Empty</span>
               </div>
             );
           }
 
           return (
-            <div key={key} className={slotCardStyle} onClick={() => onSelect(key)}>
+            <div
+              key={key}
+              className={slotCardStyle}
+              onClick={() => {
+                playMenuSound('UI/Accept');
+                onSelect(key);
+              }}
+            >
               <div>
                 <div className={slotNameStyle}>
                   {label}: {save.mapName || save.mapId}
@@ -848,7 +908,13 @@ function SlotPicker({
           );
         })}
       </div>
-      <button className={secondaryButtonStyle} onClick={onCancel}>
+      <button
+        className={secondaryButtonStyle}
+        onClick={() => {
+          playMenuSound('UI/Cancel');
+          onCancel();
+        }}
+      >
         Cancel
       </button>
     </div>
@@ -892,6 +958,7 @@ function PauseMenu({
   const handleSave = useCallback(
     (key: string) => {
       onSave(key);
+      playMenuSound('Menu/Save');
       setFeedback('Saved!');
       setView('menu');
       clearTimeout(feedbackTimer.current);
@@ -902,6 +969,7 @@ function PauseMenu({
 
   const handleLoad = useCallback(
     (key: string) => {
+      playMenuSound('Menu/Load');
       onLoad(key);
     },
     [onLoad],
@@ -928,10 +996,22 @@ function PauseMenu({
           Unsaved progress will be lost.
         </p>
         <div className={overlayButtonRow}>
-          <button className={buttonStyle} onClick={onExit}>
+          <button
+            className={buttonStyle}
+            onClick={() => {
+              playMenuSound('UI/Accept');
+              onExit();
+            }}
+          >
             Exit
           </button>
-          <button className={secondaryButtonStyle} onClick={() => setView('menu')}>
+          <button
+            className={secondaryButtonStyle}
+            onClick={() => {
+              playMenuSound('UI/Cancel');
+              setView('menu');
+            }}
+          >
             Cancel
           </button>
         </div>
@@ -945,12 +1025,19 @@ function PauseMenu({
       {feedback && <div className={feedbackStyle}>{feedback}</div>}
       {error && <div className={errorFeedbackStyle}>{error}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 220 }}>
-        <button className={buttonStyle} onClick={onResume}>
+        <button
+          className={buttonStyle}
+          onClick={() => {
+            playMenuSound('UI/Accept');
+            onResume();
+          }}
+        >
           Resume
         </button>
         <button
           className={secondaryButtonStyle}
           onClick={() => {
+            playMenuSound('Menu/Transition');
             clearFeedback();
             setView('save');
           }}
@@ -960,19 +1047,38 @@ function PauseMenu({
         <button
           className={secondaryButtonStyle}
           onClick={() => {
+            playMenuSound('Menu/Transition');
             clearFeedback();
             setView('load');
           }}
         >
           Load Game
         </button>
-        <button className={secondaryButtonStyle} onClick={onExportSave}>
+        <button
+          className={secondaryButtonStyle}
+          onClick={() => {
+            playMenuSound('UI/Accept');
+            onExportSave();
+          }}
+        >
           Export Save
         </button>
-        <button className={secondaryButtonStyle} onClick={handleImport}>
+        <button
+          className={secondaryButtonStyle}
+          onClick={() => {
+            playMenuSound('UI/Accept');
+            handleImport();
+          }}
+        >
           Import Save
         </button>
-        <button className={secondaryButtonStyle} onClick={() => setView('confirm-exit')}>
+        <button
+          className={secondaryButtonStyle}
+          onClick={() => {
+            playMenuSound('Menu/Transition');
+            setView('confirm-exit');
+          }}
+        >
           Exit to Menu
         </button>
       </div>
@@ -1014,7 +1120,10 @@ function LevelSelect({
           <div
             key={entry.id}
             className={selectedMapId === entry.id ? mapCardSelectedStyle : mapCardStyle}
-            onClick={() => setSelectedMapId(entry.id)}
+            onClick={() => {
+              playMenuSound('UI/Next');
+              setSelectedMapId(entry.id);
+            }}
           >
             <div className={mapCardNameStyle}>{entry.name}</div>
             <div className={mapCardDetailStyle}>{entry.size}</div>
@@ -1028,7 +1137,10 @@ function LevelSelect({
 
         <div
           className={selectedMapId === 'random' ? mapCardSelectedStyle : mapCardStyle}
-          onClick={() => setSelectedMapId('random')}
+          onClick={() => {
+            playMenuSound('UI/Next');
+            setSelectedMapId('random');
+          }}
         >
           <div className={mapCardNameStyle}>Random Map</div>
           <div className={mapCardDetailStyle}>15x10, generated</div>
@@ -1042,7 +1154,10 @@ function LevelSelect({
           <button
             key={biome}
             className={selectedBiome === biome ? biomeChipSelectedStyle : biomeChipStyle}
-            onClick={() => setSelectedBiome(biome)}
+            onClick={() => {
+              playMenuSound('UI/Next');
+              setSelectedBiome(biome);
+            }}
           >
             {label}
           </button>
@@ -1050,13 +1165,22 @@ function LevelSelect({
       </div>
 
       <div className={actionRowStyle}>
-        <button className={secondaryButtonStyle} onClick={onBack}>
+        <button
+          className={secondaryButtonStyle}
+          onClick={() => {
+            playMenuSound('UI/Cancel');
+            onBack();
+          }}
+        >
           Back
         </button>
         <button
           className={buttonStyle}
           disabled={selectedMapId === null}
-          onClick={handleStart}
+          onClick={() => {
+            playMenuSound('UI/Start');
+            handleStart();
+          }}
           style={selectedMapId === null ? { opacity: 0.4, cursor: 'default' } : undefined}
         >
           Start Game
@@ -1444,16 +1568,12 @@ function App() {
   }, []);
 
   // Manage music at App level to survive PlaygroundGame remounts (load game)
-  const currentSong =
+  const currentSong: SongName =
     screen === 'playing' && gameConfig
       ? biomeToSong(gameConfig.biome, gameConfig.metadata?.tags)
-      : null;
+      : MENU_SONG;
   useEffect(() => {
-    if (currentSong) {
-      AudioPlayer.play(currentSong);
-    } else {
-      AudioPlayer.stopCurrentSong();
-    }
+    AudioPlayer.play(currentSong);
   }, [currentSong]);
 
   // Memoize the game rendering to avoid unnecessary work

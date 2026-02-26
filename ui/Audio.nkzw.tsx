@@ -15,6 +15,7 @@ import chionesLeap from '../audio/music/chiones-leap.mp3';
 import eosDawn from '../audio/music/eos-dawn.mp3';
 import gaiasRise from '../audio/music/gaias-rise.mp3';
 import hestiasSerenade from '../audio/music/hestias-serenade.mp3';
+import menuTheme from '../audio/music/menu-theme.mp3';
 import poseidonsTide from '../audio/music/poseidons-tide.mp3';
 import poseidonsWrath from '../audio/music/poseidons-wrath.mp3';
 import selenesTransquility from '../audio/music/selenes-tranquility.mp3';
@@ -63,6 +64,9 @@ import explosionImpact from '../audio/sfx/explosion_impact.mp3';
 import explosionInfantry from '../audio/sfx/explosion_infantry.mp3';
 import explosionNaval from '../audio/sfx/explosion_naval.mp3';
 import fireworks from '../audio/sfx/fireworks.mp3';
+import menuLoad from '../audio/sfx/menu_load.mp3';
+import menuSave from '../audio/sfx/menu_save.mp3';
+import menuTransition from '../audio/sfx/menu_transition.mp3';
 import movementAir from '../audio/sfx/movement_air.mp3';
 import movementAirEnd from '../audio/sfx/movement_air_end.mp3';
 import movementAirInfantry from '../audio/sfx/movement_air_infantry.mp3';
@@ -154,6 +158,9 @@ export const Sounds = new Map([
   ['Explosion/Naval', explosionNaval],
   ['ExplosionImpact', explosionImpact],
   ['Fireworks', fireworks],
+  ['Menu/Save', menuSave],
+  ['Menu/Load', menuLoad],
+  ['Menu/Transition', menuTransition],
   ['Movement/Air', movementAir],
   ['Movement/AirEnd', movementAirEnd],
   ['Movement/AirInfantry', movementAirInfantry],
@@ -212,6 +219,7 @@ export const Music = new Map([
   ['eos-dawn', eosDawn],
   ['gaias-rise', gaiasRise],
   ['hestias-serenade', hestiasSerenade],
+  ['menu-theme', menuTheme],
   ['poseidons-tide', poseidonsTide],
   ['poseidons-wrath', poseidonsWrath],
   ['selenes-tranquility', selenesTransquility],
