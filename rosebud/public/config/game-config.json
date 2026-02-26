@@ -1,0 +1,16 @@
+{
+  "AllowedMisses": 2,
+  "BuildingCover": 10,
+  "Charge": 1500,
+  "CounterAttack": 0.75,
+  "CreateTracksCost": 50,
+  "HealAmount": 50,
+  "LeaderStatusEffect": 0.05,
+  "MaxCharges": 10,
+  "MaxHealth": 100,
+  "MinDamage": 5,
+  "MoraleStatusEffect": 0.1,
+  "PoisonDamage": 20,
+  "PowerStationMultiplier": 0.3,
+  "RaisedCounterAttack": 0.9
+}

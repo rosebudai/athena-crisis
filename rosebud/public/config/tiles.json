@@ -1,0 +1,776 @@
+[
+  {
+    "id": 1,
+    "name": "Plain",
+    "cover": 5,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 7,
+    "name": "Ruins",
+    "cover": 10,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 2,
+    "name": "Forest",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 22,
+    "name": "Barrel",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 27,
+    "name": "Box",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 12,
+    "name": "Forest",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 23,
+    "name": "Forest",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 3,
+    "name": "Mountain",
+    "cover": 30,
+    "vision": 2,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 2,
+      "Amphibious": -1,
+      "Soldier": 2,
+      "HeavySoldier": 3,
+      "LowAltitude": 2,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 28,
+    "name": "Platform",
+    "cover": 30,
+    "vision": 2,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": -1,
+      "Soldier": 2,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 4,
+    "name": "Street",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 16,
+    "name": "Bridge",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 1,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": 1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 30,
+    "name": "Path",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 33,
+    "name": "Bridge",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 1,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": 1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 19,
+    "name": "Trench",
+    "cover": 40,
+    "vision": 2,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": -1,
+      "Soldier": 0.5,
+      "HeavySoldier": 0.5,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 5,
+    "name": "River",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 2,
+      "HeavySoldier": 2,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 8,
+    "name": "Construction Site",
+    "cover": 15,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 14,
+    "name": "Pier",
+    "cover": 10,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 15,
+    "name": "Shipyard Construction Site",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 20,
+    "name": "Airfield",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 6,
+    "name": "Sea",
+    "cover": 10,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": 1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 9,
+    "name": "Reef",
+    "cover": 25,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": 2,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 10,
+    "name": "Beach",
+    "cover": 5,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 1,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": 1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 25,
+    "name": "Gas Bubbles",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": 2,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 29,
+    "name": "Space",
+    "cover": 10,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 36,
+    "name": "Island",
+    "cover": 25,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 1,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": 1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 37,
+    "name": "Iceberg",
+    "cover": 30,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": -1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 38,
+    "name": "Weeds",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": 2,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 21,
+    "name": "Deep Sea",
+    "cover": 10,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": -1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": -1,
+      "Rail": -1,
+      "Ship": 1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 17,
+    "name": "Rail Track",
+    "cover": 15,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 2,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": 1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 18,
+    "name": "Rail Bridge",
+    "cover": 15,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 1,
+      "Soldier": 2,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": 1,
+      "Ship": 1,
+      "Tires": 1,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 11,
+    "name": "Campsite",
+    "cover": 15,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 1,
+      "Tread": 1
+    }
+  },
+  {
+    "id": 13,
+    "name": "Storm Cloud",
+    "cover": null,
+    "vision": -1,
+    "movementCosts": {
+      "Air": -1,
+      "AirInfantry": -1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": -1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 34,
+    "name": "Pipe",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": -1,
+      "AirInfantry": -1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": -1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 35,
+    "name": "Teleporter",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 39,
+    "name": "Teleporter",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 40,
+    "name": "Teleporter",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 41,
+    "name": "Teleporter",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 42,
+    "name": "Teleporter",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 43,
+    "name": "Teleporter",
+    "cover": 20,
+    "vision": 1,
+    "movementCosts": {
+      "Air": 1,
+      "AirInfantry": 1,
+      "Amphibious": 2,
+      "Soldier": 1,
+      "HeavySoldier": 1,
+      "LowAltitude": 1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": 2,
+      "Tread": 2
+    }
+  },
+  {
+    "id": 24,
+    "name": "Lightning Barrier",
+    "cover": null,
+    "vision": -1,
+    "movementCosts": {
+      "Air": -1,
+      "AirInfantry": -1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": -1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 26,
+    "name": "Computer",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": -1,
+      "AirInfantry": -1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": -1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 31,
+    "name": "Wall",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": -1,
+      "AirInfantry": -1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": -1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  },
+  {
+    "id": 32,
+    "name": "Window",
+    "cover": 0,
+    "vision": 1,
+    "movementCosts": {
+      "Air": -1,
+      "AirInfantry": -1,
+      "Amphibious": -1,
+      "Soldier": -1,
+      "HeavySoldier": -1,
+      "LowAltitude": -1,
+      "Rail": -1,
+      "Ship": -1,
+      "Tires": -1,
+      "Tread": -1
+    }
+  }
+]

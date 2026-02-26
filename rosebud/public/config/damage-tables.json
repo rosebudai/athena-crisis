@@ -1,0 +1,374 @@
+{
+  "AirToAirMissile": {
+    "Airplane": 115,
+    "AirSoldier": 130,
+    "LowAltitude": 130
+  },
+  "AIUMiniGun": {
+    "AirSoldier": 120,
+    "Amphibious": 110,
+    "Artillery": 130,
+    "Building": 110,
+    "Ground": 110,
+    "LowAltitude": 120,
+    "Rail": 90,
+    "Ship": 90,
+    "Soldier": 140,
+    "Structure": 70
+  },
+  "AmphibiousLightGun": {
+    "AirSoldier": 55,
+    "Amphibious": 75,
+    "Artillery": 90,
+    "Building": 70,
+    "Ground": 90,
+    "LowAltitude": 55,
+    "Rail": 75,
+    "Ship": 55,
+    "Soldier": 55,
+    "Structure": 60
+  },
+  "AntiAirGun": {
+    "Airplane": 135,
+    "AirSoldier": 145,
+    "Amphibious": 65,
+    "Artillery": 65,
+    "Building": 70,
+    "Ground": 55,
+    "LowAltitude": 155,
+    "Rail": 60,
+    "Soldier": 50,
+    "Structure": 10
+  },
+  "AntiArtilleryGun": {
+    "Artillery": 100
+  },
+  "AntiShipMissile": {
+    "Amphibious": 100,
+    "Artillery": 60,
+    "Ground": 60,
+    "Rail": 50,
+    "Ship": 75,
+    "Soldier": 50,
+    "Structure": 60
+  },
+  "Artillery": {
+    "AirSoldier": 80,
+    "Amphibious": 100,
+    "Artillery": 90,
+    "Ground": 100,
+    "LowAltitude": 80,
+    "Rail": 90,
+    "Ship": 60,
+    "Soldier": 100
+  },
+  "Battery": {
+    "AirSoldier": 100,
+    "Amphibious": 130,
+    "Artillery": 130,
+    "Ground": 130,
+    "LowAltitude": 100,
+    "Rail": 90,
+    "Ship": 80,
+    "Soldier": 110
+  },
+  "Bazooka": {
+    "AirSoldier": 110,
+    "Amphibious": 110,
+    "Artillery": 110,
+    "Ground": 110,
+    "LowAltitude": 110,
+    "Rail": 80,
+    "Soldier": 110,
+    "Airplane": 100,
+    "Ship": 80
+  },
+  "Bite": {
+    "AirSoldier": 100,
+    "Amphibious": 100,
+    "Artillery": 100,
+    "Ground": 100,
+    "LowAltitude": 100,
+    "Soldier": 120
+  },
+  "Bomb": {
+    "Amphibious": 115,
+    "Artillery": 100,
+    "Building": 70,
+    "Ground": 115,
+    "Rail": 110,
+    "Ship": 115,
+    "Soldier": 105,
+    "Structure": 50
+  },
+  "Cannon": {
+    "AirSoldier": 90,
+    "Amphibious": 110,
+    "Artillery": 100,
+    "Ground": 110,
+    "LowAltitude": 90,
+    "Rail": 100,
+    "Ship": 70,
+    "Soldier": 110
+  },
+  "Club": {
+    "AirSoldier": 100,
+    "Amphibious": 100,
+    "Artillery": 100,
+    "Building": 50,
+    "Ground": 100,
+    "Soldier": 120,
+    "Structure": 30
+  },
+  "CorrosiveAirToAirMissile": {
+    "Airplane": 80,
+    "AirSoldier": 90,
+    "LowAltitude": 90
+  },
+  "CorrosiveBomb": {
+    "Amphibious": 55,
+    "Artillery": 40,
+    "Ground": 50,
+    "Rail": 50,
+    "Ship": 55,
+    "Soldier": 45
+  },
+  "CruiseMissile": {
+    "Amphibious": 80,
+    "Artillery": 90,
+    "Ground": 90,
+    "Rail": 95,
+    "Ship": 40,
+    "Soldier": 80,
+    "Structure": 80
+  },
+  "DroneBomb": {
+    "Amphibious": 90,
+    "Artillery": 75,
+    "Ground": 90,
+    "Rail": 85,
+    "Ship": 90,
+    "Soldier": 80
+  },
+  "Flamethrower": {
+    "AirSoldier": 100,
+    "Amphibious": 70,
+    "Artillery": 75,
+    "Ground": 70,
+    "Soldier": 130,
+    "Structure": 60
+  },
+  "Flask": {
+    "AirSoldier": 25,
+    "Amphibious": 25,
+    "Artillery": 25,
+    "Ground": 25,
+    "Rail": 25,
+    "Ship": 25,
+    "Soldier": 25
+  },
+  "HeavyArtillery": {
+    "AirSoldier": 120,
+    "Amphibious": 120,
+    "Artillery": 80,
+    "Ground": 120,
+    "Rail": 80,
+    "Ship": 80,
+    "Soldier": 120
+  },
+  "HeavyGun": {
+    "AirSoldier": 55,
+    "Amphibious": 115,
+    "Artillery": 115,
+    "Building": 70,
+    "Ground": 115,
+    "LowAltitude": 55,
+    "Rail": 95,
+    "Ship": 50,
+    "Soldier": 65,
+    "Structure": 80
+  },
+  "InfernoFlamethrower": {
+    "AirSoldier": 115,
+    "Amphibious": 85,
+    "Artillery": 90,
+    "Ground": 85,
+    "Soldier": 145,
+    "Structure": 75,
+    "Airplane": 100,
+    "LowAltitude": 115,
+    "Ship": 85
+  },
+  "LightAirGun": {
+    "AirSoldier": 80,
+    "Amphibious": 65,
+    "Artillery": 85,
+    "Ground": 85,
+    "LowAltitude": 80,
+    "Rail": 75,
+    "Ship": 45,
+    "Soldier": 75
+  },
+  "LightAirToAirMissile": {
+    "Airplane": 80,
+    "AirSoldier": 90,
+    "LowAltitude": 90
+  },
+  "LightGun": {
+    "AirSoldier": 55,
+    "Amphibious": 90,
+    "Artillery": 90,
+    "Building": 70,
+    "Ground": 90,
+    "LowAltitude": 55,
+    "Rail": 75,
+    "Ship": 30,
+    "Soldier": 55,
+    "Structure": 60
+  },
+  "MG": {
+    "AirSoldier": 65,
+    "Amphibious": 35,
+    "Artillery": 35,
+    "Ground": 35,
+    "Soldier": 80
+  },
+  "MiniGun": {
+    "AirSoldier": 80,
+    "Amphibious": 70,
+    "Artillery": 90,
+    "Building": 70,
+    "Ground": 70,
+    "LowAltitude": 80,
+    "Rail": 50,
+    "Ship": 50,
+    "Soldier": 100,
+    "Structure": 30
+  },
+  "Pistol": {
+    "AirSoldier": 85,
+    "Amphibious": 55,
+    "Artillery": 55,
+    "Ground": 55,
+    "LowAltitude": 85,
+    "Soldier": 80
+  },
+  "Punch": {
+    "AirSoldier": 50,
+    "Amphibious": 25,
+    "Artillery": 25,
+    "Ground": 25,
+    "Soldier": 50
+  },
+  "Railgun": {
+    "AirSoldier": 90,
+    "Amphibious": 130,
+    "Artillery": 90,
+    "Ground": 130,
+    "LowAltitude": 90,
+    "Rail": 90,
+    "Ship": 90,
+    "Soldier": 130
+  },
+  "Rocket": {
+    "Airplane": 60,
+    "AirSoldier": 60,
+    "Amphibious": 90,
+    "Artillery": 70,
+    "Ground": 80,
+    "LowAltitude": 60,
+    "Rail": 60,
+    "Ship": 60,
+    "Soldier": 80
+  },
+  "RocketLauncher": {
+    "AirSoldier": 55,
+    "Amphibious": 95,
+    "Artillery": 95,
+    "Ground": 95,
+    "LowAltitude": 75,
+    "Rail": 65,
+    "Soldier": 35
+  },
+  "Rockets": {
+    "Airplane": 90,
+    "AirSoldier": 70,
+    "LowAltitude": 90
+  },
+  "SAM": {
+    "Airplane": 140,
+    "AirSoldier": 150,
+    "LowAltitude": 150
+  },
+  "SeaMG": {
+    "AirSoldier": 80,
+    "Amphibious": 35,
+    "Artillery": 35,
+    "Ground": 35,
+    "LowAltitude": 80,
+    "Ship": 35,
+    "Soldier": 80
+  },
+  "Shotgun": {
+    "AirSoldier": 85,
+    "Amphibious": 55,
+    "Artillery": 55,
+    "Ground": 55,
+    "LowAltitude": 85,
+    "Soldier": 80
+  },
+  "SniperRifle": {
+    "AirSoldier": 120,
+    "Amphibious": 70,
+    "Artillery": 100,
+    "Ground": 70,
+    "LowAltitude": 120,
+    "Rail": 50,
+    "Soldier": 120
+  },
+  "SoldierMG": {
+    "AirSoldier": 65,
+    "Amphibious": 35,
+    "Artillery": 35,
+    "Ground": 35,
+    "LowAltitude": 65,
+    "Soldier": 60
+  },
+  "SuperMiniGun": {
+    "AirSoldier": 120,
+    "Amphibious": 110,
+    "Artillery": 130,
+    "Building": 110,
+    "Ground": 110,
+    "LowAltitude": 120,
+    "Rail": 90,
+    "Ship": 90,
+    "Soldier": 140,
+    "Structure": 70
+  },
+  "TentacleWhip": {
+    "AirSoldier": 100,
+    "Amphibious": 100,
+    "Artillery": 100,
+    "Ground": 100,
+    "LowAltitude": 100,
+    "Rail": 100,
+    "Ship": 120,
+    "Soldier": 120
+  },
+  "Torpedo": {
+    "Amphibious": 90,
+    "Ship": 65,
+    "Structure": 50
+  },
+  "ZombieBite": {
+    "AirSoldier": 50,
+    "Amphibious": 50,
+    "Artillery": 50,
+    "Ground": 50,
+    "LowAltitude": 50,
+    "Soldier": 70,
+    "Rail": 30,
+    "Ship": 30
+  }
+}
