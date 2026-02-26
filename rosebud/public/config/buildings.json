@@ -1,156 +1,102 @@
-[
-  {
-    "id": 1,
-    "name": "HQ",
+{
+  "HQ": {
     "defense": 40,
     "funds": 0,
     "cost": 0
   },
-  {
-    "id": 2,
-    "name": "House",
+  "House": {
     "defense": 10,
     "funds": 100,
     "cost": 100
   },
-  {
-    "id": 12,
-    "name": "Barracks",
+  "Barracks": {
     "defense": 20,
     "funds": 0,
     "cost": 150
   },
-  {
-    "id": 19,
-    "name": "Spawn Platform",
+  "Spawn Platform": {
     "defense": 20,
     "funds": 0,
     "cost": 150
   },
-  {
-    "id": 3,
-    "name": "Factory",
+  "Factory": {
     "defense": 10,
     "funds": 0,
     "cost": 250
   },
-  {
-    "id": 4,
-    "name": "Airbase",
+  "Airbase": {
     "defense": 20,
     "funds": 0,
     "cost": 200
   },
-  {
-    "id": 15,
-    "name": "Bar",
+  "Bar": {
     "defense": 40,
     "funds": 300,
     "cost": null
   },
-  {
-    "id": 9,
-    "name": "Research Lab",
+  "Research Lab": {
     "defense": 60,
     "funds": 0,
     "cost": null
   },
-  {
-    "id": 10,
-    "name": "Radar Station",
+  "Radar Station": {
     "defense": 30,
     "funds": 0,
     "cost": 500
   },
-  {
-    "id": 11,
-    "name": "Power Station",
+  "Power Station": {
     "defense": 30,
     "funds": 0,
     "cost": null
   },
-  {
-    "id": 13,
-    "name": "Shelter",
+  "Shelter": {
     "defense": 40,
     "funds": 50,
     "cost": 200
   },
-  {
-    "id": 17,
-    "name": "Repair Shop",
+  "Repair Shop": {
     "defense": 30,
     "funds": 150,
     "cost": 300
   },
-  {
-    "id": 18,
-    "name": "Medbay",
+  "Medbay": {
     "defense": 50,
     "funds": 0,
     "cost": 200
   },
-  {
-    "id": 5,
-    "name": "Shipyard",
+  "Shipyard": {
     "defense": 20,
     "funds": 0,
     "cost": 300
   },
-  {
-    "id": 16,
-    "name": "Oil Rig",
+  "Oil Rig": {
     "defense": 20,
     "funds": 200,
     "cost": 200
   },
-  {
-    "id": 6,
-    "name": "Barrier",
+  "Barrier": {
     "defense": 30,
     "funds": 0,
     "cost": 0
   },
-  {
-    "id": 7,
-    "name": "Barrier",
-    "defense": 30,
-    "funds": 0,
-    "cost": 0
-  },
-  {
-    "id": 8,
-    "name": "Crashed Airplane",
+  "Crashed Airplane": {
     "defense": 50,
     "funds": 0,
     "cost": 0
   },
-  {
-    "id": 14,
-    "name": "Destroyed House",
+  "Destroyed House": {
     "defense": 40,
     "funds": 0,
     "cost": 0
   },
-  {
-    "id": 20,
-    "name": "Destroyed Super Tank",
+  "Destroyed Super Tank": {
     "defense": 50,
     "funds": 0,
     "cost": 0
   },
-  {
-    "id": 21,
-    "name": "Sea Barrier",
-    "defense": 30,
-    "funds": 0,
-    "cost": 0
-  },
-  {
-    "id": 22,
-    "name": "Sea Barrier",
+  "Sea Barrier": {
     "defense": 30,
     "funds": 0,
     "cost": 0
   }
-]
+}

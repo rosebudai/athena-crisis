@@ -1,506 +1,394 @@
-[
-  {
-    "id": 1,
-    "name": "Pioneer",
+{
+  "Pioneer": {
     "cost": 100,
     "fuel": 40,
     "radius": 3,
     "vision": 2,
     "defense": 0
   },
-  {
-    "id": 2,
-    "name": "Infantry",
+  "Infantry": {
     "cost": 200,
     "fuel": 50,
     "radius": 3,
     "vision": 2,
     "defense": 5
   },
-  {
-    "id": 26,
-    "name": "Medic",
+  "Medic": {
     "cost": 250,
     "fuel": 80,
     "radius": 4,
     "vision": 1,
     "defense": 0
   },
-  {
-    "id": 16,
-    "name": "Saboteur",
+  "Saboteur": {
     "cost": 275,
     "fuel": 40,
     "radius": 6,
     "vision": 1,
     "defense": 10
   },
-  {
-    "id": 3,
-    "name": "Rocket Launcher",
+  "Rocket Launcher": {
     "cost": 300,
     "fuel": 40,
     "radius": 3,
     "vision": 2,
     "defense": 15
   },
-  {
-    "id": 4,
-    "name": "APU",
+  "APU": {
     "cost": 300,
     "fuel": 40,
     "radius": 4,
     "vision": 3,
     "defense": 25
   },
-  {
-    "id": 20,
-    "name": "Jetpack",
+  "Jetpack": {
     "cost": 300,
     "fuel": 30,
     "radius": 4,
     "vision": 2,
     "defense": 20
   },
-  {
-    "id": 14,
-    "name": "Sniper",
+  "Sniper": {
     "cost": 375,
     "fuel": 40,
     "radius": 4,
     "vision": 1,
     "defense": 15
   },
-  {
-    "id": 15,
-    "name": "Flamethrower",
+  "Flamethrower": {
     "cost": 400,
     "fuel": 30,
     "radius": 4,
     "vision": 3,
     "defense": 0
   },
-  {
-    "id": 36,
-    "name": "Dinosaur",
+  "Dinosaur": {
     "cost": null,
     "fuel": 100,
     "radius": 3,
     "vision": 3,
     "defense": 25
   },
-  {
-    "id": 44,
-    "name": "Dragon",
+  "Dragon": {
     "cost": null,
     "fuel": 50,
     "radius": 4,
     "vision": 3,
     "defense": 25
   },
-  {
-    "id": 45,
-    "name": "Bear",
+  "Bear": {
     "cost": null,
     "fuel": 100,
     "radius": 2,
     "vision": 2,
     "defense": 25
   },
-  {
-    "id": 46,
-    "name": "Alien",
+  "Alien": {
     "cost": null,
     "fuel": 20,
     "radius": 4,
     "vision": 1,
     "defense": 10
   },
-  {
-    "id": 47,
-    "name": "Zombie",
+  "Zombie": {
     "cost": null,
     "fuel": 20,
     "radius": 3,
     "vision": 1,
     "defense": 0
   },
-  {
-    "id": 48,
-    "name": "Ogre",
+  "Ogre": {
     "cost": null,
     "fuel": 20,
     "radius": 3,
     "vision": 1,
     "defense": 0
   },
-  {
-    "id": 49,
-    "name": "Brute",
+  "Brute": {
     "cost": null,
     "fuel": 60,
     "radius": 4,
     "vision": 1,
     "defense": 50
   },
-  {
-    "id": 50,
-    "name": "Commander",
+  "Commander": {
     "cost": null,
     "fuel": 30,
     "radius": 2,
     "vision": 1,
     "defense": 20
   },
-  {
-    "id": 52,
-    "name": "Super APU",
+  "Super APU": {
     "cost": null,
     "fuel": 60,
     "radius": 5,
     "vision": 4,
     "defense": 30
   },
-  {
-    "id": 53,
-    "name": "Bazooka Bear",
+  "Bazooka Bear": {
     "cost": null,
     "fuel": 100,
     "radius": 3,
     "vision": 2,
     "defense": 10
   },
-  {
-    "id": 54,
-    "name": "AIU",
+  "AIU": {
     "cost": null,
     "fuel": 60,
     "radius": 5,
     "vision": 4,
     "defense": 40
   },
-  {
-    "id": 55,
-    "name": "Inferno Jetpack",
+  "Inferno Jetpack": {
     "cost": null,
     "fuel": 50,
     "radius": 5,
     "vision": 3,
     "defense": 35
   },
-  {
-    "id": 56,
-    "name": "Scientist",
+  "Scientist": {
     "cost": null,
     "fuel": 30,
     "radius": 3,
     "vision": 2,
     "defense": 10
   },
-  {
-    "id": 6,
-    "name": "Jeep",
+  "Jeep": {
     "cost": 150,
     "fuel": 60,
     "radius": 7,
     "vision": 2,
     "defense": 10
   },
-  {
-    "id": 10,
-    "name": "Humvee",
+  "Humvee": {
     "cost": 225,
     "fuel": 50,
     "radius": 8,
     "vision": 5,
     "defense": 20
   },
-  {
-    "id": 7,
-    "name": "Artillery",
+  "Artillery": {
     "cost": 250,
     "fuel": 40,
     "radius": 5,
     "vision": 1,
     "defense": 10
   },
-  {
-    "id": 39,
-    "name": "Humvee Avenger",
+  "Humvee Avenger": {
     "cost": null,
     "fuel": 30,
     "radius": 6,
     "vision": 5,
     "defense": 20
   },
-  {
-    "id": 40,
-    "name": "Artillery Humvee",
+  "Artillery Humvee": {
     "cost": null,
     "fuel": 40,
     "radius": 6,
     "vision": 3,
     "defense": 30
   },
-  {
-    "id": 42,
-    "name": "Truck",
+  "Truck": {
     "cost": null,
     "fuel": 100,
     "radius": 8,
     "vision": 2,
     "defense": 40
   },
-  {
-    "id": 51,
-    "name": "Cannon",
+  "Cannon": {
     "cost": null,
     "fuel": 40,
     "radius": 1,
     "vision": 1,
     "defense": 40
   },
-  {
-    "id": 11,
-    "name": "Anti Air",
+  "Anti Air": {
     "cost": 250,
     "fuel": 30,
     "radius": 6,
     "vision": 3,
     "defense": 30
   },
-  {
-    "id": 5,
-    "name": "Small Tank",
+  "Small Tank": {
     "cost": 375,
     "fuel": 30,
     "radius": 7,
     "vision": 2,
     "defense": 40
   },
-  {
-    "id": 37,
-    "name": "Heavy Tank",
+  "Heavy Tank": {
     "cost": 600,
     "fuel": 25,
     "radius": 5,
     "vision": 2,
     "defense": 60
   },
-  {
-    "id": 12,
-    "name": "Heavy Artillery",
+  "Heavy Artillery": {
     "cost": 650,
     "fuel": 15,
     "radius": 3,
     "vision": 1,
     "defense": 5
   },
-  {
-    "id": 38,
-    "name": "Super Tank",
+  "Super Tank": {
     "cost": null,
     "fuel": 20,
     "radius": 3,
     "vision": 1,
     "defense": 70
   },
-  {
-    "id": 17,
-    "name": "Transport Chopper",
+  "Transport Chopper": {
     "cost": 200,
     "fuel": 60,
     "radius": 7,
     "vision": 3,
     "defense": 30
   },
-  {
-    "id": 21,
-    "name": "Sea Patrol",
+  "Sea Patrol": {
     "cost": 200,
     "fuel": 40,
     "radius": 4,
     "vision": 4,
     "defense": 30
   },
-  {
-    "id": 9,
-    "name": "Helicopter",
+  "Helicopter": {
     "cost": 300,
     "fuel": 40,
     "radius": 6,
     "vision": 5,
     "defense": 40
   },
-  {
-    "id": 25,
-    "name": "X-Fighter",
+  "X-Fighter": {
     "cost": 250,
     "fuel": 40,
     "radius": 5,
     "vision": 2,
     "defense": 30
   },
-  {
-    "id": 18,
-    "name": "Fighter Jet",
+  "Fighter Jet": {
     "cost": 550,
     "fuel": 50,
     "radius": 8,
     "vision": 3,
     "defense": 60
   },
-  {
-    "id": 19,
-    "name": "Bomber",
+  "Bomber": {
     "cost": 800,
     "fuel": 40,
     "radius": 6,
     "vision": 2,
     "defense": 55
   },
-  {
-    "id": 22,
-    "name": "Acid Bomber",
+  "Acid Bomber": {
     "cost": null,
     "fuel": 30,
     "radius": 5,
     "vision": 1,
     "defense": 60
   },
-  {
-    "id": 23,
-    "name": "Drone Bomber",
+  "Drone Bomber": {
     "cost": null,
     "fuel": 50,
     "radius": 5,
     "vision": 3,
     "defense": 50
   },
-  {
-    "id": 24,
-    "name": "Recon Drone",
+  "Recon Drone": {
     "cost": null,
     "fuel": 60,
     "radius": 7,
     "vision": 5,
     "defense": 15
   },
-  {
-    "id": 31,
-    "name": "Patrol Ship",
+  "Patrol Ship": {
     "cost": 300,
     "fuel": 60,
     "radius": 5,
     "vision": 3,
     "defense": 20
   },
-  {
-    "id": 27,
-    "name": "Amphibious Tank",
+  "Amphibious Tank": {
     "cost": 450,
     "fuel": 25,
     "radius": 6,
     "vision": 2,
     "defense": 35
   },
-  {
-    "id": 33,
-    "name": "Corvette",
+  "Corvette": {
     "cost": 200,
     "fuel": 30,
     "radius": 6,
     "vision": 1,
     "defense": 0
   },
-  {
-    "id": 13,
-    "name": "Lander",
+  "Lander": {
     "cost": 225,
     "fuel": 60,
     "radius": 7,
     "vision": 1,
     "defense": 10
   },
-  {
-    "id": 32,
-    "name": "Support Ship",
+  "Support Ship": {
     "cost": 275,
     "fuel": 90,
     "radius": 6,
     "vision": 5,
     "defense": 40
   },
-  {
-    "id": 28,
-    "name": "Destroyer",
+  "Destroyer": {
     "cost": 350,
     "fuel": 60,
     "radius": 6,
     "vision": 3,
     "defense": 30
   },
-  {
-    "id": 29,
-    "name": "Frigate",
+  "Frigate": {
     "cost": 400,
     "fuel": 60,
     "radius": 5,
     "vision": 3,
     "defense": 10
   },
-  {
-    "id": 30,
-    "name": "Hovercraft",
+  "Hovercraft": {
     "cost": 400,
     "fuel": 60,
     "radius": 7,
     "vision": 3,
     "defense": 20
   },
-  {
-    "id": 8,
-    "name": "Battleship",
+  "Battleship": {
     "cost": 1000,
     "fuel": 40,
     "radius": 5,
     "vision": 2,
     "defense": 30
   },
-  {
-    "id": 43,
-    "name": "Octopus",
+  "Octopus": {
     "cost": null,
     "fuel": 200,
     "radius": 5,
     "vision": 2,
     "defense": 5
   },
-  {
-    "id": 41,
-    "name": "Supply Train",
+  "Supply Train": {
     "cost": 200,
     "fuel": 60,
     "radius": 6,
     "vision": 1,
     "defense": 40
   },
-  {
-    "id": 35,
-    "name": "Transport Train",
+  "Transport Train": {
     "cost": 325,
     "fuel": 30,
     "radius": 7,
     "vision": 2,
     "defense": 30
   },
-  {
-    "id": 34,
-    "name": "Mammoth",
+  "Mammoth": {
     "cost": 900,
     "fuel": 30,
     "radius": 4,
     "vision": 1,
     "defense": 35
   }
-]
+}

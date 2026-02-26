@@ -118,15 +118,16 @@ function generateGameConfig() {
 // ---------------------------------------------------------------------------
 
 function generateUnitStats() {
-  const units = mapUnits((unit) => ({
-    id: unit.id,
-    name: unit.name,
-    cost: unit.getCostFor(null),
-    fuel: unit.configuration.fuel,
-    radius: unit.getRadiusFor(null),
-    vision: unit.configuration.vision,
-    defense: unit.defense,
-  }));
+  const units: Record<string, Record<string, number>> = {};
+  mapUnits((unit) => {
+    units[unit.name] = {
+      cost: unit.getCostFor(null),
+      fuel: unit.configuration.fuel,
+      radius: unit.getRadiusFor(null),
+      vision: unit.configuration.vision,
+      defense: unit.defense,
+    };
+  });
   writeJSON('unit-stats.json', units);
 }
 
@@ -157,22 +158,22 @@ function generateDamageTables() {
 
 function generateTiles() {
   const mtNames = movementTypeNameMap();
+  const tiles: Record<string, { cover: number; vision: number; movement: Record<string, number> }> =
+    {};
 
-  const tiles = getAllTiles().map((tile) => {
-    const movementCosts: Record<string, number> = {};
+  for (const tile of getAllTiles()) {
+    if (tiles[tile.name]) continue; // skip duplicate names (Forest variants share config)
+    const movement: Record<string, number> = {};
     for (const [mt, cost] of tile.configuration.movement) {
       const name = mtNames.get(mt) ?? String(mt);
-      movementCosts[name] = cost;
+      movement[name] = cost;
     }
-
-    return {
-      id: tile.id,
-      name: tile.name,
+    tiles[tile.name] = {
       cover: tile.configuration.cover,
       vision: tile.configuration.vision,
-      movementCosts,
+      movement,
     };
-  });
+  }
 
   writeJSON('tiles.json', tiles);
 }
@@ -182,14 +183,14 @@ function generateTiles() {
 // ---------------------------------------------------------------------------
 
 function generateBuildings() {
-  const buildings = getAllBuildings().map((building) => ({
-    id: building.id,
-    name: building.name,
-    defense: building.defense,
-    funds: building.configuration.funds,
-    cost: building.getCostFor(null),
-  }));
-
+  const buildings: Record<string, Record<string, number>> = {};
+  for (const building of getAllBuildings()) {
+    buildings[building.name] = {
+      defense: building.defense,
+      funds: building.configuration.funds,
+      cost: building.getCostFor(null),
+    };
+  }
   writeJSON('buildings.json', buildings);
 }
 
