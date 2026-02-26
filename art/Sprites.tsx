@@ -78,6 +78,28 @@ const emptySet = new Set<HEX>();
 const emptyMap = new Map<HEX, HEX>();
 const nullPromise = Promise.resolve(null);
 
+let reskinSources: Map<string, string> = new Map();
+
+async function loadReskinSources(): Promise<void> {
+  try {
+    const response = await fetch('reskin/manifest.json');
+    if (!response.ok) return;
+    const data = (await response.json()) as {
+      basePath?: string;
+      sprites?: string[];
+    };
+    const basePath = data.basePath || 'reskin';
+    for (const name of data.sprites || []) {
+      reskinSources.set(name, `${basePath}/${name}.png`);
+    }
+    if (reskinSources.size > 0) {
+      console.log(`[Reskin] Loaded ${reskinSources.size} sprite overrides from ${basePath}`);
+    }
+  } catch {
+    // No reskin manifest — continue with default sprites
+  }
+}
+
 const imageMap = new Map<string, [HTMLImageElement, Promise<void>]>();
 let sprites = new Map<string, string>();
 let preparePromise: Promise<ReadonlyMap<string, string>> | null = null;
@@ -93,6 +115,7 @@ const _prepareSprites = async (
   canvasToURL: CanvasToURLFn,
   isBuild: boolean,
 ) => {
+  await loadReskinSources();
   const promises: Array<Promise<ReadonlyArray<Resources>>> = [];
   for (const [
     imageName,
@@ -103,62 +126,66 @@ const _prepareSprites = async (
     }
 
     const variantDetails = Variants.get(imageName);
+    const reskinSource = reskinSources.get(imageName);
+    const sourcePromise = reskinSource
+      ? loadImage(reskinSource)
+      : shouldSwap() && variantDetails
+        ? loadImage(variantDetails.source)
+        : nullPromise;
     promises.push(
-      (shouldSwap() && variantDetails ? loadImage(variantDetails.source) : nullPromise).then(
-        (image) =>
-          Promise.all(
-            swap(
-              image,
-              variantDetails?.variants ||
-                new Map([...variantNames].map((name) => [name, emptyMap])),
-              variantDetails ? variantDetails.staticColors : emptySet,
-              null,
-              {
-                ignoreMissing,
-                imageName,
-              },
-            ).map(async ([variant, canvas]) => {
-              const name = `${imageName}-${variant}`;
-              const resource = canvas ? await canvasToURL(canvas, name) : getFallbackURL(name);
-              const item = [name, resource] as Resource;
-              if (asImage) {
-                imageMap.set(name, cacheImage(resource));
-              }
+      sourcePromise.then((image) =>
+        Promise.all(
+          swap(
+            image,
+            variantDetails?.variants || new Map([...variantNames].map((name) => [name, emptyMap])),
+            variantDetails ? variantDetails.staticColors : emptySet,
+            null,
+            {
+              ignoreMissing,
+              imageName,
+            },
+          ).map(async ([variant, canvas]) => {
+            const name = `${imageName}-${variant}`;
+            const resource = canvas ? await canvasToURL(canvas, name) : getFallbackURL(name);
+            const item = [name, resource] as Resource;
+            if (asImage) {
+              imageMap.set(name, cacheImage(resource));
+            }
 
-              // Preload only the images that are most likely used on most maps.
-              if (!canvas && (variant === 0 || variant === 1 || variant === 2)) {
-                imageMap.set(name, cacheImage(resource));
-              }
+            // Preload only the images that are most likely used on most maps.
+            if (!canvas && (variant === 0 || variant === 1 || variant === 2)) {
+              imageMap.set(name, cacheImage(resource));
+            }
 
-              if (!waterSwap) {
-                return [item];
-              }
+            if (!waterSwap) {
+              return [item];
+            }
 
-              return canvas
-                ? loadImage(resource)
-                    .then((blobImage) =>
-                      Promise.all(
-                        swap(blobImage, BiomeVariants, null, null, {
-                          ignoreMissing: true,
-                        }).map(async ([biome, waterSwapCanvas]) => {
-                          const name = `${imageName}-${variant}-${biome}`;
-                          const resource = waterSwapCanvas
-                            ? await canvasToURL(waterSwapCanvas, name)
-                            : getFallbackURL(name);
-                          return [name, resource] as Resource;
-                        }),
-                      ),
-                    )
-                    .then((waterSwapResources) => [item, ...waterSwapResources])
-                : [
-                    item,
-                    ...[...BiomeVariants.keys()].map((biome) => {
-                      const name = `${imageName}-${variant}-${biome}`;
-                      return [name, getFallbackURL(name)] as Resource;
-                    }),
-                  ];
-            }),
-          ),
+            return canvas
+              ? loadImage(resource)
+                  .then((blobImage) =>
+                    Promise.all(
+                      swap(blobImage, BiomeVariants, null, null, {
+                        ignoreMissing: true,
+                      }).map(async ([biome, waterSwapCanvas]) => {
+                        const name = `${imageName}-${variant}-${biome}`;
+                        const resource = waterSwapCanvas
+                          ? await canvasToURL(waterSwapCanvas, name)
+                          : getFallbackURL(name);
+                        return [name, resource] as Resource;
+                      }),
+                    ),
+                  )
+                  .then((waterSwapResources) => [item, ...waterSwapResources])
+              : [
+                  item,
+                  ...[...BiomeVariants.keys()].map((biome) => {
+                    const name = `${imageName}-${variant}-${biome}`;
+                    return [name, getFallbackURL(name)] as Resource;
+                  }),
+                ];
+          }),
+        ),
       ),
     );
   }
