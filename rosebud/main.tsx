@@ -1203,14 +1203,7 @@ function PlaygroundGameInner({
   const [paused, setPaused] = useState(false);
   const zoom = useScale();
 
-  // Play biome-appropriate music when game starts or biome changes
-  const song = biomeToSong(biome, metadata?.tags);
-  useEffect(() => {
-    AudioPlayer.play(song);
-    return () => {
-      AudioPlayer.stopCurrentSong();
-    };
-  }, [song]);
+  // Music is managed at App level to avoid stop/play race on load
 
   // Auto-save after each action
   const wrappedSetGame = useCallback(
@@ -1449,6 +1442,19 @@ function App() {
   const handleTitleLoad = useCallback(() => {
     setScreen('title-load');
   }, []);
+
+  // Manage music at App level to survive PlaygroundGame remounts (load game)
+  const currentSong =
+    screen === 'playing' && gameConfig
+      ? biomeToSong(gameConfig.biome, gameConfig.metadata?.tags)
+      : null;
+  useEffect(() => {
+    if (currentSong) {
+      AudioPlayer.play(currentSong);
+    } else {
+      AudioPlayer.stopCurrentSong();
+    }
+  }, [currentSong]);
 
   // Memoize the game rendering to avoid unnecessary work
   const gameElement = useMemo(() => {

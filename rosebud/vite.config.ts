@@ -37,6 +37,21 @@ export default defineConfig({
       { find: /^@deities\/hermes\/(.*)$/, replacement: resolve(root, 'hermes/$1') },
       { find: /^@deities\/i18n\/(.*)$/, replacement: resolve(root, 'i18n/$1') },
       { find: /^@deities\/ui\/(.*)$/, replacement: resolve(root, 'ui/$1') },
+      // Resolve react-router from pnpm nested deps (needed for standalone builds)
+      {
+        find: /^react-router-dom$/,
+        replacement: resolve(
+          root,
+          'node_modules/.pnpm/react-router-dom@7.13.0_react-dom@19.2.4_react@19.2.4__react@19.2.4/node_modules/react-router-dom',
+        ),
+      },
+      {
+        find: /^react-router$/,
+        replacement: resolve(
+          root,
+          'node_modules/.pnpm/react-router@7.13.0_react-dom@19.2.4_react@19.2.4__react@19.2.4/node_modules/react-router',
+        ),
+      },
     ],
   },
   plugins: [
