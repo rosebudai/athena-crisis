@@ -744,6 +744,47 @@ export class UnitInfo {
   static setConstructor(unitClass: typeof Unit) {
     _unitClass = unitClass;
   }
+
+  clone(
+    newId: ID,
+    overrides?: {
+      cost?: number;
+      defense?: number;
+      fuel?: number;
+      name?: string;
+      radius?: number;
+      vision?: number;
+    },
+  ): UnitInfo {
+    const cloned = Object.create(Object.getPrototypeOf(this)) as UnitInfo;
+    Object.assign(cloned, this);
+    (cloned as { id: ID }).id = newId;
+    if (overrides) {
+      if (overrides.name != null) {
+        (cloned as any).internalName = overrides.name;
+      }
+      if (overrides.defense != null) {
+        (cloned as { defense: number }).defense = overrides.defense;
+      }
+      if (overrides.cost != null) {
+        (cloned as any).cost = overrides.cost;
+      }
+      if (overrides.radius != null) {
+        (cloned as any).radius = overrides.radius;
+      }
+      if (overrides.fuel != null || overrides.vision != null) {
+        const config = { ...cloned.configuration };
+        if (overrides.fuel != null) {
+          config.fuel = overrides.fuel;
+        }
+        if (overrides.vision != null) {
+          config.vision = overrides.vision;
+        }
+        (cloned as any).configuration = config;
+      }
+    }
+    return cloned;
+  }
 }
 
 const buff = (map: DamageMap, change: number) =>
@@ -3981,12 +4022,25 @@ export function getUnitInfoOrThrow(id: number): UnitInfo {
   return unit;
 }
 
-const units = Units.slice().sort((infoA, infoB) => {
+let units = Units.slice().sort((infoA, infoB) => {
   if (infoA.movementType.sortOrder === infoB.movementType.sortOrder) {
     return infoA.getCostFor(null) - infoB.getCostFor(null);
   }
   return infoA.movementType.sortOrder - infoB.movementType.sortOrder;
 });
+
+export function registerCustomUnit(unit: UnitInfo): number {
+  Units.push(unit);
+  const id = Units.length;
+  (unit as { id: ID }).id = id as ID;
+  units = Units.slice().sort((infoA, infoB) => {
+    if (infoA.movementType.sortOrder === infoB.movementType.sortOrder) {
+      return infoA.getCostFor(null) - infoB.getCostFor(null);
+    }
+    return infoA.movementType.sortOrder - infoB.movementType.sortOrder;
+  });
+  return id;
+}
 
 export function filterUnits(
   fn: (unitInfo: UnitInfo) => boolean | undefined,

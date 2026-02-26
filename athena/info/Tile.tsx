@@ -198,6 +198,35 @@ export class TileInfo {
   isInaccessible() {
     return this.type & TileTypes.Inaccessible;
   }
+
+  clone(
+    newId: ID,
+    overrides?: {
+      cover?: number;
+      name?: string;
+      vision?: number;
+    },
+  ): TileInfo {
+    const cloned = Object.create(Object.getPrototypeOf(this)) as TileInfo;
+    Object.assign(cloned, this);
+    (cloned as { id: ID }).id = newId;
+    if (overrides) {
+      if (overrides.name != null) {
+        (cloned as any).internalName = overrides.name;
+      }
+      if (overrides.cover != null || overrides.vision != null) {
+        const config = { ...cloned.configuration };
+        if (overrides.cover != null) {
+          config.cover = overrides.cover;
+        }
+        if (overrides.vision != null) {
+          config.vision = overrides.vision;
+        }
+        (cloned as { configuration: typeof config }).configuration = config;
+      }
+    }
+    return cloned;
+  }
 }
 
 export const SeaAnimation = {
@@ -1717,7 +1746,15 @@ const Tiles = [
   Teleporter6,
 ];
 
-const tiles = sortBy(Tiles.slice(), ({ group }) => group);
+let tiles = sortBy(Tiles.slice(), ({ group }) => group);
+
+export function registerCustomTile(tile: TileInfo): number {
+  Tiles.push(tile);
+  const id = Tiles.length;
+  (tile as { id: ID }).id = id as ID;
+  tiles = sortBy(Tiles.slice(), ({ group }) => group);
+  return id;
+}
 
 export const PlainTileGroup = new Set(
   tiles.filter(({ id }) => !isSea(id) && id !== StormCloud.id && id !== Lightning.id),

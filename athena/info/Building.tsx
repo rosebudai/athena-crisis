@@ -242,6 +242,31 @@ export class BuildingInfo {
   static setConstructor(buildingClass: typeof Building) {
     _buildingClass = buildingClass;
   }
+
+  clone(
+    newId: ID,
+    overrides?: {
+      cost?: number;
+      defense?: number;
+      name?: string;
+    },
+  ): BuildingInfo {
+    const cloned = Object.create(Object.getPrototypeOf(this)) as BuildingInfo;
+    Object.assign(cloned, this);
+    (cloned as { id: ID }).id = newId;
+    if (overrides) {
+      if (overrides.name != null) {
+        (cloned as any).internalName = overrides.name;
+      }
+      if (overrides.defense != null) {
+        (cloned as { defense: number }).defense = overrides.defense;
+      }
+      if (overrides.cost != null) {
+        (cloned as any).cost = overrides.cost;
+      }
+    }
+    return cloned;
+  }
 }
 
 export const HQ = new BuildingInfo(
@@ -660,11 +685,23 @@ export function getBuildingInfoOrThrow(id: number): BuildingInfo {
   return building;
 }
 
-const buildings = Buildings.slice().sort((infoA, infoB) => {
+let buildings = Buildings.slice().sort((infoA, infoB) => {
   const sortA = infoA.configuration.sort;
   const sortB = infoB.configuration.sort;
   return sortA === sortB ? (infoA.id > infoB.id ? 1 : -1) : sortA > sortB ? 1 : -1;
 });
+
+export function registerCustomBuilding(building: BuildingInfo): number {
+  Buildings.push(building);
+  const id = Buildings.length;
+  (building as { id: ID }).id = id as ID;
+  buildings = Buildings.slice().sort((infoA, infoB) => {
+    const sortA = infoA.configuration.sort;
+    const sortB = infoB.configuration.sort;
+    return sortA === sortB ? (infoA.id > infoB.id ? 1 : -1) : sortA > sortB ? 1 : -1;
+  });
+  return id;
+}
 
 export function getAllBuildings(): ReadonlyArray<BuildingInfo> {
   return buildings;
