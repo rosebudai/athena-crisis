@@ -1,3 +1,10 @@
+import { ActionResponse } from '@deities/apollo/ActionResponse.tsx';
+import { decodeEffects, Effects, encodeEffects, EncodedEffects } from '@deities/apollo/Effects.tsx';
+import {
+  decodeActionResponse,
+  encodeActionResponse,
+  EncodedActionResponse,
+} from '@deities/apollo/EncodedActions.tsx';
 import { MapMetadata } from '@deities/apollo/MapMetadata.tsx';
 import { prepareSprites } from '@deities/art/Sprites.tsx';
 import {
@@ -7,6 +14,7 @@ import {
 } from '@deities/athena/generator/MapGenerator.tsx';
 import convertBiome from '@deities/athena/lib/convertBiome.tsx';
 import { Biome } from '@deities/athena/map/Biome.tsx';
+import { PlainMap } from '@deities/athena/map/PlainMap.tsx';
 import MapData, { SizeVector } from '@deities/athena/MapData.tsx';
 import { biomeToSong } from '@deities/hera/audio/Music.tsx';
 import GameMap from '@deities/hera/GameMap.tsx';
@@ -17,6 +25,8 @@ import LocaleContext from '@deities/hera/i18n/LocaleContext.tsx';
 import GameActions from '@deities/hera/ui/GameActions.tsx';
 import DemoViewer from '@deities/hera/ui/lib/DemoViewer.tsx';
 import MapInfo from '@deities/hera/ui/MapInfo.tsx';
+import { ClientGame } from '@deities/hermes/game/toClientGame.tsx';
+import undo from '@deities/hermes/game/undo.tsx';
 import { UndoType } from '@deities/hermes/game/undo.tsx';
 import demo1, { metadata as metadata1 } from '@deities/hermes/map-fixtures/demo-1.tsx';
 import demo2, { metadata as metadata2 } from '@deities/hermes/map-fixtures/demo-2.tsx';
@@ -32,8 +42,9 @@ import { AlertContext } from '@deities/ui/hooks/useAlert.tsx';
 import useScale, { ScaleContext } from '@deities/ui/hooks/useScale.tsx';
 import { css } from '@emotion/css';
 import { VisibilityStateContext } from '@nkzw/use-visibility-state';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 
 // Initialize global CSS (variables, global styles)
 initializeCSSVariables();
@@ -47,6 +58,134 @@ AudioPlayer.resume();
 AudioPlayer.preload();
 
 const startAction = { type: 'Start' } as const;
+
+// --- Save/Load ---
+
+const SAVE_VERSION = 1;
+const SAVE_KEYS = ['athena-save-1', 'athena-save-2', 'athena-save-3'] as const;
+const AUTOSAVE_KEY = 'athena-autosave';
+
+type SaveData = {
+  version: number;
+  timestamp: number;
+  mapId: string;
+  mapName: string;
+  biome: number;
+  mapState: PlainMap;
+  effects: EncodedEffects;
+  lastAction: EncodedActionResponse | null;
+  ended: boolean;
+};
+
+function serializeGame(
+  game: {
+    state: MapData;
+    effects: Effects;
+    lastAction: ActionResponse | null;
+    ended: boolean;
+  },
+  mapId: string,
+  mapName: string,
+  biome: Biome,
+): SaveData {
+  return {
+    version: SAVE_VERSION,
+    timestamp: Date.now(),
+    mapId,
+    mapName,
+    biome,
+    mapState: game.state.toJSON(),
+    effects: encodeEffects(game.effects),
+    lastAction: game.lastAction ? encodeActionResponse(game.lastAction) : null,
+    ended: game.ended,
+  };
+}
+
+function writeSave(key: string, data: SaveData): boolean {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readSave(key: string): SaveData | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data?.version !== SAVE_VERSION) return null;
+    return data as SaveData;
+  } catch {
+    return null;
+  }
+}
+
+function readAllSaves(): Record<string, SaveData | null> {
+  const saves: Record<string, SaveData | null> = {};
+  for (const key of SAVE_KEYS) {
+    saves[key] = readSave(key);
+  }
+  saves[AUTOSAVE_KEY] = readSave(AUTOSAVE_KEY);
+  return saves;
+}
+
+function deleteSave(key: string): void {
+  localStorage.removeItem(key);
+}
+
+function exportSave(data: SaveData): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `athena-crisis-save-${new Date(data.timestamp).toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importSaveFromFile(): Promise<SaveData | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result as string);
+          if (data?.version !== SAVE_VERSION) {
+            resolve(null);
+            return;
+          }
+          resolve(data as SaveData);
+        } catch {
+          resolve(null);
+        }
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsText(file);
+    };
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
+function formatTimestamp(ts: number): string {
+  const d = new Date(ts);
+  const now = Date.now();
+  const diff = now - ts;
+  if (diff < 60_000) return 'Just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return d.toLocaleDateString();
+}
 
 // --- Map catalog ---
 
@@ -109,6 +248,16 @@ const biomeOptions: ReadonlyArray<{ biome: Biome; label: string }> = [
   { biome: Biome.Swamp, label: 'Swamp' },
   { biome: Biome.Volcano, label: 'Volcano' },
 ];
+
+const biomeNames: Record<number, string> = {
+  [Biome.Grassland]: 'Grassland',
+  [Biome.Desert]: 'Desert',
+  [Biome.Snow]: 'Snow',
+  [Biome.Swamp]: 'Swamp',
+  [Biome.Volcano]: 'Volcano',
+  [Biome.Spaceship]: 'Spaceship',
+  [Biome.Luna]: 'Luna',
+};
 
 // --- Emotion styles ---
 
@@ -403,21 +552,204 @@ const howToLabelStyle = css`
   margin-right: 8px;
 `;
 
+const slotGridStyle = css`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 400px;
+  margin-bottom: 24px;
+`;
+
+const slotCardStyle = css`
+  background: #2a2a36;
+  border: 2px solid #444;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  &:hover {
+    border-color: #ff6b6b;
+    background: #32323e;
+  }
+`;
+
+const slotCardEmptyStyle = css`
+  background: #2a2a36;
+  border: 2px solid #333;
+  padding: 14px 18px;
+  cursor: pointer;
+  color: #555;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: #666;
+  }
+`;
+
+const slotCardDisabledStyle = css`
+  background: #222230;
+  border: 2px solid #333;
+  padding: 14px 18px;
+  color: #555;
+  cursor: default;
+`;
+
+const slotNameStyle = css`
+  font-size: 14px;
+  font-weight: bold;
+  color: #e0e0e0;
+`;
+
+const slotDetailStyle = css`
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+`;
+
+const slotTimeStyle = css`
+  font-size: 11px;
+  color: #666;
+  text-align: right;
+  white-space: nowrap;
+`;
+
+const pauseButtonStyle = css`
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 9999;
+  width: 40px;
+  height: 40px;
+  background: rgba(27, 27, 35, 0.8);
+  border: 1px solid #555;
+  color: #ccc;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(58, 58, 74, 0.9);
+  }
+`;
+
+const feedbackStyle = css`
+  color: #4ecdc4;
+  font-size: 14px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+  min-height: 20px;
+`;
+
+const errorFeedbackStyle = css`
+  color: #ff6b6b;
+  font-size: 14px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+  min-height: 20px;
+`;
+
+// --- Error boundary ---
+
+class GameErrorBoundary extends Component<
+  { children: ReactNode; onReset: () => void },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('[GameErrorBoundary]', error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className={containerStyle}>
+          <h2 className={titleStyle} style={{ fontSize: 28 }}>
+            Something went wrong
+          </h2>
+          <p style={{ color: '#aaa', marginBottom: 24, textAlign: 'center' }}>
+            {this.state.error.message}
+          </p>
+          <button
+            className={buttonStyle}
+            onClick={() => {
+              this.setState({ error: null });
+              this.props.onReset();
+            }}
+          >
+            Back to Menu
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // --- Screen types ---
 
-type Screen = 'title' | 'select' | 'playing' | 'howto';
+type Screen = 'title' | 'select' | 'playing' | 'howto' | 'title-load';
+
+// --- Loaded game state passed from App to PlaygroundGame ---
+
+type LoadedGameState = {
+  effects: Effects;
+  lastAction: ActionResponse | null;
+  ended: boolean;
+};
 
 // --- Components ---
 
-function TitleScreen({ onPlay, onHowToPlay }: { onPlay: () => void; onHowToPlay: () => void }) {
+function TitleScreen({
+  onPlay,
+  onHowToPlay,
+  onContinue,
+  onLoadGame,
+  hasAutoSave,
+}: {
+  onPlay: () => void;
+  onHowToPlay: () => void;
+  onContinue: () => void;
+  onLoadGame: () => void;
+  hasAutoSave: boolean;
+}) {
   return (
     <div className={containerStyle}>
       <h1 className={titleStyle}>Athena Crisis</h1>
       <p className={subtitleStyle}>Turn-Based Strategy</p>
-      <button className={buttonStyle} onClick={onPlay}>
-        Play
+      {hasAutoSave && (
+        <button className={buttonStyle} onClick={onContinue} style={{ marginBottom: 12 }}>
+          Continue
+        </button>
+      )}
+      <button
+        className={hasAutoSave ? secondaryButtonStyle : buttonStyle}
+        onClick={onPlay}
+        style={hasAutoSave ? { marginBottom: 12 } : undefined}
+      >
+        {hasAutoSave ? 'New Game' : 'Play'}
       </button>
-      <button className={secondaryButtonStyle} onClick={onHowToPlay} style={{ marginTop: 16 }}>
+      <button className={secondaryButtonStyle} onClick={onLoadGame} style={{ marginTop: 4 }}>
+        Load Game
+      </button>
+      <button className={secondaryButtonStyle} onClick={onHowToPlay} style={{ marginTop: 4 }}>
         How to Play
       </button>
     </div>
@@ -461,6 +793,180 @@ function HowToPlay({ onBack }: { onBack: () => void }) {
       <button className={secondaryButtonStyle} onClick={onBack}>
         Back
       </button>
+    </div>
+  );
+}
+
+function SlotPicker({
+  mode,
+  onSelect,
+  onCancel,
+}: {
+  mode: 'save' | 'load';
+  onSelect: (key: string) => void;
+  onCancel: () => void;
+}) {
+  const saves = useMemo(() => readAllSaves(), []);
+
+  const slots = mode === 'save' ? SAVE_KEYS : [...SAVE_KEYS, AUTOSAVE_KEY];
+
+  return (
+    <div className={overlayStyle}>
+      <h2 className={selectHeadingStyle}>{mode === 'save' ? 'Save Game' : 'Load Game'}</h2>
+      <div className={slotGridStyle}>
+        {slots.map((key) => {
+          const save = saves[key];
+          const label = key === AUTOSAVE_KEY ? 'Auto-Save' : `Slot ${key.slice(-1)}`;
+
+          if (!save) {
+            if (mode === 'load') {
+              return (
+                <div key={key} className={slotCardDisabledStyle}>
+                  <span>{label} -- Empty</span>
+                </div>
+              );
+            }
+            return (
+              <div key={key} className={slotCardEmptyStyle} onClick={() => onSelect(key)}>
+                <span>{label} -- Empty</span>
+              </div>
+            );
+          }
+
+          return (
+            <div key={key} className={slotCardStyle} onClick={() => onSelect(key)}>
+              <div>
+                <div className={slotNameStyle}>
+                  {label}: {save.mapName || save.mapId}
+                </div>
+                <div className={slotDetailStyle}>
+                  {biomeNames[save.biome] || 'Unknown'} -- {save.ended ? 'Ended' : 'In Progress'}
+                </div>
+              </div>
+              <div className={slotTimeStyle}>{formatTimestamp(save.timestamp)}</div>
+            </div>
+          );
+        })}
+      </div>
+      <button className={secondaryButtonStyle} onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+type PauseView = 'menu' | 'save' | 'load' | 'confirm-exit';
+
+function PauseMenu({
+  onResume,
+  onSave,
+  onLoad,
+  onExportSave,
+  onImportSave,
+  onExit,
+}: {
+  onResume: () => void;
+  onSave: (key: string) => void;
+  onLoad: (key: string) => void;
+  onExportSave: () => void;
+  onImportSave: () => void;
+  onExit: () => void;
+}) {
+  const [view, setView] = useState<PauseView>('menu');
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const clearFeedback = useCallback(() => {
+    setFeedback(null);
+    setError(null);
+  }, []);
+
+  const handleSave = useCallback(
+    (key: string) => {
+      onSave(key);
+      setFeedback('Saved!');
+      setView('menu');
+      setTimeout(clearFeedback, 2000);
+    },
+    [onSave, clearFeedback],
+  );
+
+  const handleLoad = useCallback(
+    (key: string) => {
+      onLoad(key);
+    },
+    [onLoad],
+  );
+
+  const handleImport = useCallback(async () => {
+    clearFeedback();
+    onImportSave();
+  }, [onImportSave, clearFeedback]);
+
+  if (view === 'save') {
+    return <SlotPicker mode="save" onSelect={handleSave} onCancel={() => setView('menu')} />;
+  }
+
+  if (view === 'load') {
+    return <SlotPicker mode="load" onSelect={handleLoad} onCancel={() => setView('menu')} />;
+  }
+
+  if (view === 'confirm-exit') {
+    return (
+      <div className={overlayStyle}>
+        <h2 className={selectHeadingStyle}>Exit to Menu?</h2>
+        <p style={{ color: '#aaa', marginBottom: 24, textAlign: 'center', maxWidth: 360 }}>
+          Unsaved progress will be lost.
+        </p>
+        <div className={overlayButtonRow}>
+          <button className={buttonStyle} onClick={onExit}>
+            Exit
+          </button>
+          <button className={secondaryButtonStyle} onClick={() => setView('menu')}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={overlayStyle}>
+      <h2 className={selectHeadingStyle}>Paused</h2>
+      {feedback && <div className={feedbackStyle}>{feedback}</div>}
+      {error && <div className={errorFeedbackStyle}>{error}</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 220 }}>
+        <button className={buttonStyle} onClick={onResume}>
+          Resume
+        </button>
+        <button
+          className={secondaryButtonStyle}
+          onClick={() => {
+            clearFeedback();
+            setView('save');
+          }}
+        >
+          Save Game
+        </button>
+        <button
+          className={secondaryButtonStyle}
+          onClick={() => {
+            clearFeedback();
+            setView('load');
+          }}
+        >
+          Load Game
+        </button>
+        <button className={secondaryButtonStyle} onClick={onExportSave}>
+          Export Save
+        </button>
+        <button className={secondaryButtonStyle} onClick={handleImport}>
+          Import Save
+        </button>
+        <button className={secondaryButtonStyle} onClick={() => setView('confirm-exit')}>
+          Exit to Menu
+        </button>
+      </div>
     </div>
   );
 }
@@ -579,20 +1085,113 @@ function GameOverOverlay({
   );
 }
 
+// Custom hook: like useClientGame but for loaded saves (bypasses startGame)
+function useLoadedClientGame(
+  map: MapData,
+  loadedGame: LoadedGameState,
+): [game: ClientGame, setGame: (game: ClientGame) => void, undo: (type: UndoType) => void] {
+  const [game, setGame] = useState<ClientGame>(() => ({
+    effects: loadedGame.effects,
+    ended: loadedGame.ended,
+    lastAction: loadedGame.lastAction,
+    state: map,
+    turnState: [map, loadedGame.lastAction, loadedGame.effects, []],
+  }));
+
+  return [game, setGame, useCallback((type: UndoType) => setGame(undo(game, type)), [game])];
+}
+
+// Wrapper component for a newly started game (uses useClientGame which calls startGame)
+function NewPlaygroundGame(
+  props: PlaygroundGameInnerProps & { map: MapData; metadata?: MapMetadata },
+) {
+  const [game, setGame, undoFn] = useClientGame(
+    props.map,
+    DemoViewer.id,
+    props.metadata?.effects || new Map(),
+    startAction,
+  );
+  return <PlaygroundGameInner {...props} game={game} setGame={setGame} undoFn={undoFn} />;
+}
+
+// Wrapper component for a loaded game (bypasses startGame to preserve saved state)
+function LoadedPlaygroundGame(
+  props: PlaygroundGameInnerProps & { map: MapData; loadedGame: LoadedGameState },
+) {
+  const [game, setGame, undoFn] = useLoadedClientGame(props.map, props.loadedGame);
+  return <PlaygroundGameInner {...props} game={game} setGame={setGame} undoFn={undoFn} />;
+}
+
 function PlaygroundGame({
   biome,
   map,
   metadata,
+  mapId,
+  loadedGame,
   onPlayAgain,
   onBackToMenu,
+  onSave,
+  onLoad,
+  onImportSave,
 }: {
   biome: Biome;
   map: MapData;
   metadata?: MapMetadata;
+  mapId: string;
+  loadedGame?: LoadedGameState;
   onPlayAgain: () => void;
   onBackToMenu: () => void;
+  onSave: (key: string) => void;
+  onLoad: (key: string) => void;
+  onImportSave: () => void;
+}) {
+  const innerProps: PlaygroundGameInnerProps = {
+    biome,
+    metadata,
+    mapId,
+    onPlayAgain,
+    onBackToMenu,
+    onSave,
+    onLoad,
+    onImportSave,
+  };
+
+  if (loadedGame) {
+    return <LoadedPlaygroundGame {...innerProps} map={map} loadedGame={loadedGame} />;
+  }
+  return <NewPlaygroundGame {...innerProps} map={map} metadata={metadata} />;
+}
+
+type PlaygroundGameInnerProps = {
+  biome: Biome;
+  metadata?: MapMetadata;
+  mapId: string;
+  onPlayAgain: () => void;
+  onBackToMenu: () => void;
+  onSave: (key: string) => void;
+  onLoad: (key: string) => void;
+  onImportSave: () => void;
+};
+
+function PlaygroundGameInner({
+  biome,
+  metadata,
+  mapId,
+  onPlayAgain,
+  onBackToMenu,
+  onSave,
+  onLoad,
+  onImportSave,
+  game,
+  setGame,
+  undoFn,
+}: PlaygroundGameInnerProps & {
+  game: ClientGame;
+  setGame: (game: ClientGame) => void;
+  undoFn: (type: UndoType) => void;
 }) {
   const [renderKey, setRenderKey] = useState(0);
+  const [paused, setPaused] = useState(false);
   const zoom = useScale();
 
   // Play biome-appropriate music when game starts or biome changes
@@ -604,25 +1203,78 @@ function PlaygroundGame({
     };
   }, [song]);
 
-  const [game, setGame, undo] = useClientGame(
-    map,
-    DemoViewer.id,
-    metadata?.effects || new Map(),
-    startAction,
+  // Auto-save after each action
+  const wrappedSetGame = useCallback(
+    (newGame: ClientGame) => {
+      setGame(newGame);
+      if (!newGame.ended) {
+        const mapName = metadata?.name || mapId;
+        const saveData = serializeGame(newGame, mapId, mapName, biome);
+        writeSave(AUTOSAVE_KEY, saveData);
+      }
+    },
+    [setGame, mapId, metadata?.name, biome],
   );
-  const onAction = useClientGameAction(game, setGame);
+
+  const onGameError = useCallback((error: Error) => {
+    console.error('[GameAction]', error);
+  }, []);
+  const onAction = useClientGameAction(game, wrappedSetGame, null, onGameError);
+
+  // Save current game to a slot
+  const handleSave = useCallback(
+    (key: string) => {
+      const mapName = metadata?.name || mapId;
+      const saveData = serializeGame(game, mapId, mapName, biome);
+      writeSave(key, saveData);
+      onSave(key);
+    },
+    [game, mapId, metadata?.name, biome, onSave],
+  );
+
+  // Export current game
+  const handleExport = useCallback(() => {
+    const mapName = metadata?.name || mapId;
+    const saveData = serializeGame(game, mapId, mapName, biome);
+    exportSave(saveData);
+  }, [game, mapId, metadata?.name, biome]);
+
   const playerDetails = useClientGamePlayerDetails(game.state, DemoViewer);
   const onUndo = useCallback(
     (type: UndoType) => {
-      undo(type);
+      undoFn(type);
       setRenderKey((k) => k + 1);
     },
-    [undo],
+    [undoFn],
   );
   const fade = renderKey === 0;
 
   return (
     <div className={gameMapWrapperStyle}>
+      <button className={pauseButtonStyle} onClick={() => setPaused(true)} title="Menu">
+        &#9776;
+      </button>
+      {paused && (
+        <PauseMenu
+          onResume={() => setPaused(false)}
+          onSave={(key) => {
+            handleSave(key);
+          }}
+          onLoad={(key) => {
+            setPaused(false);
+            onLoad(key);
+          }}
+          onExportSave={handleExport}
+          onImportSave={() => {
+            setPaused(false);
+            onImportSave();
+          }}
+          onExit={() => {
+            setPaused(false);
+            onBackToMenu();
+          }}
+        />
+      )}
       <GameMap
         autoPanning
         currentUserId={DemoViewer.id}
@@ -632,7 +1284,9 @@ function PlaygroundGame({
         map={game.state}
         margin="minimal"
         onAction={onAction}
+        onError={onGameError}
         pan
+        paused={paused}
         playerDetails={playerDetails}
         scale={zoom}
         scroll={false}
@@ -681,6 +1335,7 @@ function App() {
     metadata?: MapMetadata;
     mapId: string;
     biome: Biome;
+    loadedGame?: LoadedGameState;
   } | null>(null);
 
   // Key to force re-mount of PlaygroundGame on play-again
@@ -714,13 +1369,72 @@ function App() {
       // Generate a new random map for play-again
       const randomBase = generateSea(generateBuildings(generateRandomMap(new SizeVector(15, 10))));
       const map = convertBiome(randomBase, gameConfig.biome);
-      setGameConfig((prev) => (prev ? { ...prev, map } : prev));
+      setGameConfig((prev) => (prev ? { ...prev, map, loadedGame: undefined } : prev));
+    } else {
+      // Restore original catalog map for a fresh start (in case we loaded a save)
+      const catalogEntry = mapCatalog.find((e) => e.id === gameConfig.mapId);
+      if (catalogEntry) {
+        const map = convertBiome(catalogEntry.map, gameConfig.biome);
+        setGameConfig((prev) =>
+          prev ? { ...prev, map, metadata: catalogEntry.metadata, loadedGame: undefined } : prev,
+        );
+      } else {
+        setGameConfig((prev) => (prev ? { ...prev, loadedGame: undefined } : prev));
+      }
     }
     setGameKey((k) => k + 1);
   }, [gameConfig]);
 
   const handleBackToMenu = useCallback(() => {
     setScreen('select');
+  }, []);
+
+  // Load a save from SaveData directly
+  const loadFromSave = useCallback((data: SaveData) => {
+    const mapState = MapData.fromObject(data.mapState);
+    const effects = decodeEffects(data.effects);
+    const lastAction = data.lastAction ? decodeActionResponse(data.lastAction) : null;
+
+    // Find metadata from catalog if it's a known map
+    const catalogEntry = mapCatalog.find((e) => e.id === data.mapId);
+
+    setGameConfig({
+      map: mapState,
+      metadata: catalogEntry?.metadata,
+      mapId: data.mapId,
+      biome: data.biome as Biome,
+      loadedGame: { effects, lastAction, ended: data.ended },
+    });
+    setGameKey((k) => k + 1);
+    setScreen('playing');
+  }, []);
+
+  const handleLoadSlot = useCallback(
+    (key: string) => {
+      const data = readSave(key);
+      if (data) loadFromSave(data);
+    },
+    [loadFromSave],
+  );
+
+  const handleImportSave = useCallback(async () => {
+    const data = await importSaveFromFile();
+    if (data) loadFromSave(data);
+  }, [loadFromSave]);
+
+  // No-op for save confirmation (save happens in PlaygroundGame)
+  const handleSaveConfirm = useCallback(() => {}, []);
+
+  // Check for auto-save existence (re-evaluated when screen changes)
+  const hasAutoSave = screen === 'title' && readSave(AUTOSAVE_KEY) !== null;
+
+  const handleContinue = useCallback(() => {
+    const data = readSave(AUTOSAVE_KEY);
+    if (data) loadFromSave(data);
+  }, [loadFromSave]);
+
+  const handleTitleLoad = useCallback(() => {
+    setScreen('title-load');
   }, []);
 
   // Memoize the game rendering to avoid unnecessary work
@@ -731,28 +1445,55 @@ function App() {
         biome={gameConfig.biome}
         key={gameKey}
         map={gameConfig.map}
+        mapId={gameConfig.mapId}
         metadata={gameConfig.metadata}
+        loadedGame={gameConfig.loadedGame}
         onPlayAgain={handlePlayAgain}
         onBackToMenu={handleBackToMenu}
+        onSave={handleSaveConfirm}
+        onLoad={handleLoadSlot}
+        onImportSave={handleImportSave}
       />
     );
-  }, [screen, gameConfig, gameKey, handlePlayAgain, handleBackToMenu]);
+  }, [
+    screen,
+    gameConfig,
+    gameKey,
+    handlePlayAgain,
+    handleBackToMenu,
+    handleSaveConfirm,
+    handleLoadSlot,
+    handleImportSave,
+  ]);
 
   return (
-    <LocaleContext>
-      <ScaleContext>
-        <VisibilityStateContext>
-          <AlertContext>
-            {screen === 'title' && (
-              <TitleScreen onPlay={handlePlay} onHowToPlay={handleHowToPlay} />
-            )}
-            {screen === 'howto' && <HowToPlay onBack={handleBack} />}
-            {screen === 'select' && <LevelSelect onBack={handleBack} onStart={handleStart} />}
-            {screen === 'playing' && gameElement}
-          </AlertContext>
-        </VisibilityStateContext>
-      </ScaleContext>
-    </LocaleContext>
+    <MemoryRouter>
+      <LocaleContext>
+        <ScaleContext>
+          <VisibilityStateContext>
+            <AlertContext>
+              {screen === 'title' && (
+                <TitleScreen
+                  onPlay={handlePlay}
+                  onHowToPlay={handleHowToPlay}
+                  onContinue={handleContinue}
+                  onLoadGame={handleTitleLoad}
+                  hasAutoSave={hasAutoSave}
+                />
+              )}
+              {screen === 'howto' && <HowToPlay onBack={handleBack} />}
+              {screen === 'title-load' && (
+                <SlotPicker mode="load" onSelect={handleLoadSlot} onCancel={handleBack} />
+              )}
+              {screen === 'select' && <LevelSelect onBack={handleBack} onStart={handleStart} />}
+              {screen === 'playing' && (
+                <GameErrorBoundary onReset={handleBackToMenu}>{gameElement}</GameErrorBoundary>
+              )}
+            </AlertContext>
+          </VisibilityStateContext>
+        </ScaleContext>
+      </LocaleContext>
+    </MemoryRouter>
   );
 }
 
