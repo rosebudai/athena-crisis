@@ -52,6 +52,15 @@ const loadImage = (url: string) =>
     image.src = url;
   });
 
+const createCanvasFromImage = (image: HTMLImageElement): Canvas => {
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(image, 0, 0);
+  return canvas as unknown as Canvas;
+};
+
 const _canvasToURL = (canvas: Canvas) =>
   new Promise<string>((resolve, reject) =>
     (canvas as unknown as HTMLCanvasElement).toBlob((blob) => {
@@ -127,11 +136,36 @@ const _prepareSprites = async (
 
     const variantDetails = Variants.get(imageName);
     const reskinSource = reskinSources.get(imageName);
-    const sourcePromise = reskinSource
-      ? loadImage(reskinSource)
-      : shouldSwap() && variantDetails
-        ? loadImage(variantDetails.source)
-        : nullPromise;
+
+    // Reskinned sprites bypass palette-swap: the AI changed the source colors
+    // so the palette-swap system can't find the expected hex values. Instead,
+    // use the reskinned image directly for all player variants.
+    if (reskinSource) {
+      promises.push(
+        loadImage(reskinSource).then(async (image) => {
+          const reskinURL = await _canvasToURL(await createCanvasFromImage(image), imageName);
+          const resources: Resources = [];
+          for (const variant of variantNames) {
+            const name = `${imageName}-${variant}`;
+            const item = [name, reskinURL] as Resource;
+            if (asImage) {
+              imageMap.set(name, cacheImage(reskinURL));
+            }
+            resources.push(item);
+            if (waterSwap) {
+              for (const biome of BiomeVariants.keys()) {
+                resources.push([`${imageName}-${variant}-${biome}`, reskinURL] as Resource);
+              }
+            }
+          }
+          return [resources];
+        }),
+      );
+      continue;
+    }
+
+    const sourcePromise =
+      shouldSwap() && variantDetails ? loadImage(variantDetails.source) : nullPromise;
     promises.push(
       sourcePromise.then((image) =>
         Promise.all(

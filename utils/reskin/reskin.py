@@ -47,7 +47,7 @@ def file_hash(path: str) -> str:
 def process_asset(asset, theme, provider, output_dir, palette_only=False):
     """Process a single asset through the appropriate transform.
 
-    Returns (output_path, image_bytes) on success, raises on failure.
+    Returns output_path on success, raises on failure.
     """
     if asset.category in ("shadow", "decorator") or palette_only:
         image_bytes = palette_swap(asset.source_path, theme.palette)
@@ -55,6 +55,27 @@ def process_asset(asset, theme, provider, output_dir, palette_only=False):
         image_bytes = ai_reskin(
             asset.source_path, asset.category, theme.prompt, provider
         )
+
+    # Post-process: resize AI output to match original dimensions and
+    # restore alpha channel.  AI models often output 4096x4096 RGB images
+    # regardless of the input size.
+    from PIL import Image
+    import io
+
+    original = Image.open(asset.source_path).convert("RGBA")
+    result = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+
+    if result.size != original.size:
+        result = result.resize(original.size, Image.LANCZOS)
+
+    # Restore alpha from original (AI destroys transparency)
+    r, g, b, _ = result.split()
+    _, _, _, a = original.split()
+    result = Image.merge("RGBA", (r, g, b, a))
+
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    image_bytes = buf.getvalue()
 
     # Write output as PNG under output_dir/theme.name/
     output_path = os.path.join(output_dir, theme.name, f"{asset.name}.png")
