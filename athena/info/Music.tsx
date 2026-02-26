@@ -83,10 +83,7 @@ export type SoundName =
   | 'Unit/SniperFold'
   | 'Unit/SniperUnfold'
   | 'Unit/Spawn'
-  | 'Unit/Supply'
-  | 'Menu/Save'
-  | 'Menu/Load'
-  | 'Menu/Transition';
+  | 'Unit/Supply';
 
 export type SongName =
   | 'apollos-ascend'
@@ -105,5 +102,4 @@ export type SongName =
   | 'poseidons-tide'
   | 'poseidons-wrath'
   | 'selenes-tranquility'
-  | 'selenes-voyage'
-  | 'menu-theme';
+  | 'selenes-voyage';

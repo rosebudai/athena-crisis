@@ -1,3 +1,4 @@
+import type { SongName, SoundName } from '@deities/athena/info/Music.tsx';
 import { ActionResponse } from '@deities/apollo/ActionResponse.tsx';
 import { decodeEffects, Effects, encodeEffects, EncodedEffects } from '@deities/apollo/Effects.tsx';
 import {
@@ -12,7 +13,6 @@ import {
   generateRandomMap,
   generateSea,
 } from '@deities/athena/generator/MapGenerator.tsx';
-import { SongName } from '@deities/athena/info/Music.tsx';
 import convertBiome from '@deities/athena/lib/convertBiome.tsx';
 import { Biome } from '@deities/athena/map/Biome.tsx';
 import { PlainMap } from '@deities/athena/map/PlainMap.tsx';
@@ -59,9 +59,8 @@ AudioPlayer.resume();
 AudioPlayer.preload();
 
 const startAction = { type: 'Start' } as const;
-const MENU_SONG: SongName = 'menu-theme';
+const MENU_SONG = 'menu-theme' as SongName;
 
-// Helper to play menu SFX
 const playMenuSound = (
   name:
     | 'UI/Accept'
@@ -72,7 +71,7 @@ const playMenuSound = (
     | 'Menu/Load'
     | 'Menu/Transition',
 ) => {
-  AudioPlayer.playSound(name);
+  AudioPlayer.playSound(name as SoundName);
 };
 
 // --- Save/Load ---
@@ -145,10 +144,6 @@ function readAllSaves(): Record<string, SaveData | null> {
   }
   saves[AUTOSAVE_KEY] = readSave(AUTOSAVE_KEY);
   return saves;
-}
-
-function deleteSave(key: string): void {
-  localStorage.removeItem(key);
 }
 
 function exportSave(data: SaveData): void {
@@ -683,17 +678,17 @@ class GameErrorBoundary extends Component<
   { children: ReactNode; onReset: () => void },
   { error: Error | null }
 > {
-  state: { error: Error | null } = { error: null };
+  override state: { error: Error | null } = { error: null };
 
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
 
-  componentDidCatch(error: Error) {
+  override componentDidCatch(error: Error) {
     console.error('[GameErrorBoundary]', error);
   }
 
-  render() {
+  override render() {
     if (this.state.error) {
       return (
         <div className={containerStyle}>
