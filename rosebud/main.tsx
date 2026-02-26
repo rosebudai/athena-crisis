@@ -46,6 +46,7 @@ import { VisibilityStateContext } from '@nkzw/use-visibility-state';
 import { Component, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import { loadAndApplyConfigs } from './ConfigLoader.ts';
 
 // Initialize global CSS (variables, global styles)
 initializeCSSVariables();
@@ -1631,5 +1632,7 @@ function App() {
   );
 }
 
-const root = createRoot(document.getElementById('root')!);
-root.render(<App />);
+loadAndApplyConfigs().then(() => {
+  const root = createRoot(document.getElementById('root')!);
+  root.render(<App />);
+});
