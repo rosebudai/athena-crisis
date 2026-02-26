@@ -1,0 +1,17 @@
+{
+  "name": "cyberpunk",
+  "description": "Neon-lit sci-fi warriors with glowing circuits and chrome armor",
+  "prompt": "cyberpunk neon sci-fi style, glowing circuits, chrome metal, dark background",
+  "palette": {
+    "reds": "#ff0044",
+    "browns": "#6600cc",
+    "yellows": "#00ffff",
+    "greens": "#00ff88",
+    "cyans": "#ff00ff",
+    "blues": "#ff6600",
+    "purples": "#00ff00",
+    "magentas": "#ffff00",
+    "silvers": "#c0c0ff",
+    "grays": "#1a0a2e"
+  }
+}
