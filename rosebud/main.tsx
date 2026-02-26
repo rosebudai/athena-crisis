@@ -42,7 +42,7 @@ import { AlertContext } from '@deities/ui/hooks/useAlert.tsx';
 import useScale, { ScaleContext } from '@deities/ui/hooks/useScale.tsx';
 import { css } from '@emotion/css';
 import { VisibilityStateContext } from '@nkzw/use-visibility-state';
-import { Component, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -875,6 +875,14 @@ function PauseMenu({
   const [view, setView] = useState<PauseView>('menu');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(
+    () => () => {
+      clearTimeout(feedbackTimer.current);
+    },
+    [],
+  );
 
   const clearFeedback = useCallback(() => {
     setFeedback(null);
@@ -886,7 +894,8 @@ function PauseMenu({
       onSave(key);
       setFeedback('Saved!');
       setView('menu');
-      setTimeout(clearFeedback, 2000);
+      clearTimeout(feedbackTimer.current);
+      feedbackTimer.current = setTimeout(clearFeedback, 2000);
     },
     [onSave, clearFeedback],
   );
@@ -1391,22 +1400,26 @@ function App() {
 
   // Load a save from SaveData directly
   const loadFromSave = useCallback((data: SaveData) => {
-    const mapState = MapData.fromObject(data.mapState);
-    const effects = decodeEffects(data.effects);
-    const lastAction = data.lastAction ? decodeActionResponse(data.lastAction) : null;
+    try {
+      const mapState = MapData.fromObject(data.mapState);
+      const effects = decodeEffects(data.effects);
+      const lastAction = data.lastAction ? decodeActionResponse(data.lastAction) : null;
 
-    // Find metadata from catalog if it's a known map
-    const catalogEntry = mapCatalog.find((e) => e.id === data.mapId);
+      // Find metadata from catalog if it's a known map
+      const catalogEntry = mapCatalog.find((e) => e.id === data.mapId);
 
-    setGameConfig({
-      map: mapState,
-      metadata: catalogEntry?.metadata,
-      mapId: data.mapId,
-      biome: data.biome as Biome,
-      loadedGame: { effects, lastAction, ended: data.ended },
-    });
-    setGameKey((k) => k + 1);
-    setScreen('playing');
+      setGameConfig({
+        map: mapState,
+        metadata: catalogEntry?.metadata,
+        mapId: data.mapId,
+        biome: data.biome as Biome,
+        loadedGame: { effects, lastAction, ended: data.ended },
+      });
+      setGameKey((k) => k + 1);
+      setScreen('playing');
+    } catch (error) {
+      console.error('[LoadSave] Corrupt save data:', error);
+    }
   }, []);
 
   const handleLoadSlot = useCallback(
