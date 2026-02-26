@@ -202,7 +202,16 @@ export class BuildingInfo {
   }
 
   getAllBuildableUnits(): Iterable<UnitInfo> {
-    return this.buildableUnits;
+    const { units, unitTypes } = this.configuration;
+    if (!unitTypes && !units) {
+      return this.buildableUnits;
+    }
+    return new Set(
+      [
+        ...(unitTypes ? filterUnits(({ type }) => unitTypes.has(type)) : []),
+        ...(units || []),
+      ].filter((unitInfo) => !this.configuration.restrictedUnits?.has(unitInfo)),
+    );
   }
 
   canBuildUnits() {
