@@ -3,6 +3,12 @@
 Parses SpriteVariants.tsx to find all sprite variant names, downloads
 source images from the Athena Crisis art server, and classifies them
 by category (unit-sprite, building, portrait, icon, shadow, decorator, effect).
+
+Note: The art server does not host raw source sheets (e.g. Units-Infantry.png).
+Instead, only palette-swapped variants are available (e.g. Units-Infantry-0.png
+for player 0).  We download the "-0" variant as the AI input — the pipeline
+restyles the default-colored sprite, and the runtime palette-swap system
+regenerates team colors from the reskinned output.
 """
 
 import os
@@ -93,12 +99,17 @@ def discover_assets(
         if category is not None and cat != category:
             continue
 
-        source_url = f"{ART_BASE_URL}/{name}.png"
+        source_url = f"{ART_BASE_URL}/{name}-0.png"
         source_path = os.path.join(cache_dir, f"{name}.png")
 
         if not os.path.exists(source_path):
             print(f"[{idx}/{total}] Downloading {name}...")
-            urllib.request.urlretrieve(source_url, source_path)
+            req = urllib.request.Request(
+                source_url,
+                headers={"User-Agent": "AthenaCrisis-Reskin/1.0"},
+            )
+            with urllib.request.urlopen(req) as resp, open(source_path, "wb") as out:
+                out.write(resp.read())
         else:
             print(f"[{idx}/{total}] Cached {name}")
 
