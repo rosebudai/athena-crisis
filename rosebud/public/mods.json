@@ -1,3 +1,3 @@
 {
-  "mods": ["mods/stat-override.js", "mods/custom-unit.js"]
+  "mods": ["mods/stat-override.js", "mods/custom-unit.js", "mods/heal-on-attack.js"]
 }

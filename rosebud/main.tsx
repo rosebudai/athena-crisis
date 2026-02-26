@@ -1332,11 +1332,17 @@ function PlaygroundGameInner({
   }, [game.state]);
 
   // Fire hook callbacks when an action response is processed.
+  // Use a ref to track the last processed action and avoid re-processing.
+  const lastProcessedActionRef = useRef<ActionResponse | null>(null);
   useEffect(() => {
-    if (game.lastAction) {
-      processActionResponse(game.lastAction, game.state);
+    if (game.lastAction && game.lastAction !== lastProcessedActionRef.current) {
+      lastProcessedActionRef.current = game.lastAction;
+      const newMap = processActionResponse(game.lastAction, game.state);
+      if (newMap !== game.state) {
+        setGame({ ...game, state: newMap });
+      }
     }
-  }, [game.lastAction, game.state]);
+  }, [game, setGame]);
 
   // Music is managed at App level to avoid stop/play race on load
 

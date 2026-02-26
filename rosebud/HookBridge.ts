@@ -1,6 +1,6 @@
 import { ActionResponse } from '@deities/apollo/ActionResponse.tsx';
-import { GameStateEntry } from '@deities/apollo/Types.tsx';
 import MapData from '@deities/athena/MapData.tsx';
+import { applyHookActions } from './HookActionApplicator.ts';
 import {
   hookSystem,
   type HookAction,
@@ -57,13 +57,17 @@ function emitEvents(
   return actions;
 }
 
+/**
+ * Processes an ActionResponse through the hook system.
+ * Returns a new MapData if hooks produced effects, or the original map if no changes.
+ */
 export function processActionResponse(
   actionResponse: ActionResponse,
   map: MapData,
   _depth: number = 0,
-): Array<GameStateEntry> {
+): MapData {
   if (_depth >= MAX_HOOK_DEPTH) {
-    return [];
+    return map;
   }
 
   const events: Array<{ event: HookEvent; ctx: HookContext }> = [];
@@ -237,18 +241,14 @@ export function processActionResponse(
 
   const hookActions = emitEvents(events);
 
-  // For now, hook actions are collected but not converted back into GameStateEntries.
-  // Future tasks will handle converting HookActions into executable game actions.
-  // The return type supports this future extension.
-  void hookActions;
+  if (hookActions.length === 0) {
+    return map;
+  }
 
-  return [];
-}
+  // Apply the hook actions to produce a new map state.
+  const newMap = applyHookActions(map, hookActions);
 
-export function createHookCallback(): (
-  actionResponse: ActionResponse,
-  map: MapData,
-) => Array<GameStateEntry> {
-  return (actionResponse: ActionResponse, map: MapData) =>
-    processActionResponse(actionResponse, map, 0);
+  // Recursively process: the applied hook actions may trigger further hooks.
+  // Depth cap prevents infinite loops.
+  return processActionResponse(actionResponse, newMap, _depth + 1);
 }
