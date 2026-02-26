@@ -61,10 +61,11 @@ export class HookSystem {
 
     const actions: Array<HookAction> = [];
 
-    for (const callback of list) {
+    // Snapshot the list to avoid issues if hooks subscribe/unsubscribe during emit.
+    for (const callback of [...list]) {
       try {
         const result = callback(ctx);
-        if (result) {
+        if (Array.isArray(result)) {
           actions.push(...result);
         }
       } catch (error) {

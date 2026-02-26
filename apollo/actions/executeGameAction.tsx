@@ -5,7 +5,7 @@ import { ActionResponse } from '../ActionResponse.tsx';
 import { Effects } from '../Effects.tsx';
 import applyConditions from '../lib/applyConditions.tsx';
 import gameHasEnded from '../lib/gameHasEnded.tsx';
-import { GameState } from '../Types.tsx';
+import { GameState, GameStateEntry } from '../Types.tsx';
 
 type AIType = {
   act(map: MapData): MapData | null;
@@ -77,6 +77,7 @@ export default async function executeGameAction(
   AIRegistry: AIRegistryT | null,
   mutateAction?: MutateActionResponseFn,
   onEndTurn?: (map: MapData) => Promise<GameState | null>,
+  onActionProcessed?: (actionResponse: ActionResponse, map: MapData) => Array<GameStateEntry>,
 ): Promise<[ActionResponse, MapData, GameState, Effects] | [null, null, null, null]> {
   const actionResult = execute(map, vision, action, mutateAction);
   if (!actionResult) {
@@ -87,6 +88,14 @@ export default async function executeGameAction(
   let [gameState, newEffects] = applyConditions(map, effects, actionResponse);
   let lastMap = gameState.at(-1)?.[1] || activeMap;
   const hasEnded = gameHasEnded(gameState);
+
+  if (onActionProcessed && !hasEnded) {
+    const hookEntries = onActionProcessed(actionResponse, lastMap);
+    if (hookEntries.length) {
+      gameState = [...gameState, ...hookEntries];
+      lastMap = gameState.at(-1)![1]!;
+    }
+  }
 
   if (
     onEndTurn &&
