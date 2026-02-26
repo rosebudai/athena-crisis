@@ -1,7 +1,3 @@
-// Audio.nkzw.tsx — Maps all sound and music names to generated mp3 files.
-// This file is auto-resolved by infra/createResolver.tsx when it exists.
-
-// Import all music tracks
 import apollosAscend from '../audio/music/apollos-ascend.mp3';
 import apollosGleam from '../audio/music/apollos-gleam.mp3';
 import aresChaos from '../audio/music/ares-chaos.mp3';
@@ -20,7 +16,6 @@ import poseidonsTide from '../audio/music/poseidons-tide.mp3';
 import poseidonsWrath from '../audio/music/poseidons-wrath.mp3';
 import selenesTransquility from '../audio/music/selenes-tranquility.mp3';
 import selenesVoyage from '../audio/music/selenes-voyage.mp3';
-// Import all SFX
 import attackAirToAirMissile from '../audio/sfx/attack_air_to_air_missile.mp3';
 import attackAntiAirGun from '../audio/sfx/attack_anti_air_gun.mp3';
 import attackArtillery from '../audio/sfx/attack_artillery.mp3';
@@ -109,10 +104,6 @@ import unitSniperFold from '../audio/sfx/unit_sniper_fold.mp3';
 import unitSniperUnfold from '../audio/sfx/unit_sniper_unfold.mp3';
 import unitSpawn from '../audio/sfx/unit_spawn.mp3';
 import unitSupply from '../audio/sfx/unit_supply.mp3';
-import { isIOS, isSafari } from './Browser.tsx';
-
-// All browsers use mp3 (universal support)
-const _ = isIOS || isSafari; // Keep import to avoid tree-shaking
 
 export const Sounds = new Map([
   ['Attack/AirToAirMissile', attackAirToAirMissile],

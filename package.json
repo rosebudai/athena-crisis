@@ -16,6 +16,7 @@
     "build:docker-server": "RELEASE_ID=$(git rev-parse --short HEAD) docker buildx build --load -f Dockerfile --platform=linux/amd64 --tag athena-crisis --build-arg RELEASE_ID=$RELEASE_ID .",
     "build:docs": "cd docs && pnpm build --outDir ../../dist/deimos/open-source",
     "build:offline": "rm -rf ./dist/offline && pnpm vite build --outDir ../dist/offline -c ./offline/vite.config.ts ./offline; rm -rf mobile/dist/offline; mkdir mobile/dist; cp -R dist/offline mobile/dist/offline; rm -rf electron/offline; cp -R dist/offline electron/offline",
+    "build:rosebud": "rm -rf ./dist/rosebud && pnpm vite build -c ./rosebud/vite.config.ts ./rosebud/",
     "build:server": "./build-server",
     "build:splash": "rm -rf ./dist/deimos && pnpm vite build --outDir ../dist/deimos -c ./deimos/vite.config.ts ./deimos/ && pnpm build:docs",
     "build:steam-i18n": "rm -rf ./dist/steami18n && node --no-warnings --experimental-specifier-resolution=node --loader ts-node/esm ./ares/scripts/translateStorepage.js",

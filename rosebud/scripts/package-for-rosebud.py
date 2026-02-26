@@ -172,7 +172,7 @@ def main():
     parser.add_argument(
         "--dist-dir",
         type=Path,
-        default=Path(__file__).resolve().parent.parent / "dist",
+        default=Path(__file__).resolve().parent.parent.parent / "dist" / "rosebud",
         help="Path to Vite dist/ output directory",
     )
     parser.add_argument(
