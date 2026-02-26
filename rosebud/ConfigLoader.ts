@@ -1,3 +1,6 @@
+import { getBuildingInfo } from '@deities/athena/info/Building.tsx';
+import { MovementType, MovementTypes } from '@deities/athena/info/MovementType.tsx';
+import { getAllTiles } from '@deities/athena/info/Tile.tsx';
 import { filterUnits, Weapons } from '@deities/athena/info/Unit.tsx';
 import { patchGameConfig } from '@deities/athena/map/Configuration.tsx';
 import { EntityType } from '@deities/athena/map/Entity.tsx';
@@ -78,6 +81,95 @@ function patchDamageTables(data: unknown): void {
   }
 }
 
+// Build a name→MovementType lookup from the MovementTypes object keys.
+const movementTypeByName: ReadonlyMap<string, MovementType> = new Map(
+  Object.entries(MovementTypes).map(([key, mt]) => [key, mt]),
+);
+
+function patchTiles(data: unknown): void {
+  const entries = data as Record<
+    string,
+    {
+      cover?: number;
+      movement?: Record<string, number>;
+      vision?: number;
+    }
+  >;
+
+  // Build a name→TileInfo lookup. For duplicate names (e.g. Forest variants)
+  // only the first is stored — they share configuration anyway.
+  const tileByName = new Map<string, ReturnType<typeof getAllTiles>[number]>();
+  for (const tile of getAllTiles()) {
+    if (!tileByName.has(tile.name)) {
+      tileByName.set(tile.name, tile);
+    }
+  }
+
+  for (const [name, overrides] of Object.entries(entries)) {
+    const tileInfo = tileByName.get(name);
+    if (!tileInfo) {
+      console.warn(`[ConfigLoader] patchTiles: unknown tile "${name}"`);
+      continue;
+    }
+
+    if (typeof overrides.cover === 'number') {
+      (tileInfo.configuration as any).cover = overrides.cover;
+    }
+    if (typeof overrides.vision === 'number') {
+      (tileInfo.configuration as any).vision = overrides.vision;
+    }
+    if (overrides.movement) {
+      const movementMap = tileInfo.configuration.movement as Map<MovementType, number>;
+      for (const [mtName, cost] of Object.entries(overrides.movement)) {
+        const movementType = movementTypeByName.get(mtName);
+        if (!movementType) {
+          console.warn(
+            `[ConfigLoader] patchTiles: unknown MovementType "${mtName}" for tile "${name}"`,
+          );
+          continue;
+        }
+        if (typeof cost === 'number') {
+          movementMap.set(movementType, cost);
+        }
+      }
+    }
+  }
+}
+
+function patchBuildings(data: unknown): void {
+  const entries = data as Record<string, { cost?: number; defense?: number; funds?: number }>;
+
+  // Build a name→BuildingInfo lookup by iterating known IDs.
+  const buildingByName = new Map<string, NonNullable<ReturnType<typeof getBuildingInfo>>>();
+  for (let id = 1; ; id++) {
+    const building = getBuildingInfo(id);
+    if (!building) {
+      break;
+    }
+    if (!buildingByName.has(building.name)) {
+      buildingByName.set(building.name, building);
+    }
+  }
+
+  for (const [name, overrides] of Object.entries(entries)) {
+    const buildingInfo = buildingByName.get(name);
+    if (!buildingInfo) {
+      console.warn(`[ConfigLoader] patchBuildings: unknown building "${name}"`);
+      continue;
+    }
+
+    if (typeof overrides.defense === 'number') {
+      (buildingInfo as any).defense = overrides.defense;
+    }
+    if (typeof overrides.funds === 'number') {
+      (buildingInfo.configuration as any).funds = overrides.funds;
+    }
+    if (typeof overrides.cost === 'number') {
+      (buildingInfo as any).cost = overrides.cost;
+    }
+  }
+}
+
 /**
  * Fetch all config JSON files in parallel and apply any overrides
  * found. Missing files and parse errors are silently ignored so the
@@ -109,12 +201,12 @@ export async function loadAndApplyConfigs(): Promise<void> {
         case 'damageTables':
           patchDamageTables(data);
           break;
-        // case 'tiles':
-        //   patchTiles(data);
-        //   break;
-        // case 'buildings':
-        //   patchBuildings(data);
-        //   break;
+        case 'tiles':
+          patchTiles(data);
+          break;
+        case 'buildings':
+          patchBuildings(data);
+          break;
       }
     } catch (error) {
       console.warn(`[ConfigLoader] Failed to apply ${CONFIG_PATHS[key]}:`, error);
