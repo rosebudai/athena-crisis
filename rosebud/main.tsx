@@ -46,7 +46,10 @@ import { VisibilityStateContext } from '@nkzw/use-visibility-state';
 import { Component, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import { initAthenaEngine, setCurrentMap } from './AthenaEngine.ts';
 import { loadAndApplyConfigs } from './ConfigLoader.ts';
+import { processActionResponse } from './HookBridge.ts';
+import { loadMods } from './ModLoader.ts';
 
 // Initialize global CSS (variables, global styles)
 initializeCSSVariables();
@@ -1323,6 +1326,18 @@ function PlaygroundGameInner({
   const [paused, setPaused] = useState(false);
   const zoom = useScale();
 
+  // Keep the plugin system's map reference in sync with game state.
+  useEffect(() => {
+    setCurrentMap(game.state);
+  }, [game.state]);
+
+  // Fire hook callbacks when an action response is processed.
+  useEffect(() => {
+    if (game.lastAction) {
+      processActionResponse(game.lastAction, game.state);
+    }
+  }, [game.lastAction, game.state]);
+
   // Music is managed at App level to avoid stop/play race on load
 
   // Auto-save after each action
@@ -1632,7 +1647,10 @@ function App() {
   );
 }
 
-loadAndApplyConfigs().then(() => {
-  const root = createRoot(document.getElementById('root')!);
-  root.render(<App />);
-});
+initAthenaEngine();
+loadAndApplyConfigs()
+  .then(() => loadMods())
+  .then(() => {
+    const root = createRoot(document.getElementById('root')!);
+    root.render(<App />);
+  });
