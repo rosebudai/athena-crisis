@@ -1,4 +1,6 @@
+import { filterUnits, Weapons } from '@deities/athena/info/Unit.tsx';
 import { patchGameConfig } from '@deities/athena/map/Configuration.tsx';
+import { EntityType } from '@deities/athena/map/Entity.tsx';
 
 /**
  * Config file paths relative to the app root.
@@ -19,6 +21,61 @@ async function fetchJSON(path: string): Promise<unknown> {
     throw new Error(`HTTP ${response.status}`);
   }
   return response.json();
+}
+
+const UNIT_STAT_FIELDS = new Set(['cost', 'fuel', 'radius', 'vision', 'defense']);
+const CONFIGURATION_FIELDS = new Set(['fuel', 'vision']);
+
+function patchUnitStats(data: unknown): void {
+  const entries = data as Record<string, Record<string, number>>;
+  for (const [name, stats] of Object.entries(entries)) {
+    const unitInfo = filterUnits((u) => u.name === name)[0];
+    if (!unitInfo) {
+      console.warn(`[ConfigLoader] patchUnitStats: unknown unit "${name}"`);
+      continue;
+    }
+    for (const [field, value] of Object.entries(stats)) {
+      if (!UNIT_STAT_FIELDS.has(field) || typeof value !== 'number') {
+        continue;
+      }
+      if (CONFIGURATION_FIELDS.has(field)) {
+        (unitInfo.configuration as any)[field] = value;
+      }
+      // cost and radius are private top-level fields; defense is public top-level.
+      if (!CONFIGURATION_FIELDS.has(field)) {
+        (unitInfo as any)[field] = value;
+      }
+    }
+  }
+}
+
+// Build a reverse map from EntityType enum name → numeric value.
+const entityTypeByName: ReadonlyMap<string, EntityType> = new Map(
+  (Object.keys(EntityType) as Array<string>)
+    .filter((key) => isNaN(Number(key)))
+    .map((key) => [key, EntityType[key as keyof typeof EntityType]]),
+);
+
+function patchDamageTables(data: unknown): void {
+  const entries = data as Record<string, Record<string, number>>;
+  for (const [weaponKey, damageEntries] of Object.entries(entries)) {
+    const weapon = (Weapons as Record<string, unknown>)[weaponKey];
+    if (!weapon || typeof weapon !== 'object' || !('damage' in (weapon as any))) {
+      console.warn(`[ConfigLoader] patchDamageTables: unknown weapon "${weaponKey}"`);
+      continue;
+    }
+    const damageMap = (weapon as any).damage as Map<EntityType, number>;
+    for (const [targetName, damage] of Object.entries(damageEntries)) {
+      const entityType = entityTypeByName.get(targetName);
+      if (entityType === undefined) {
+        console.warn(`[ConfigLoader] patchDamageTables: unknown EntityType "${targetName}"`);
+        continue;
+      }
+      if (typeof damage === 'number') {
+        damageMap.set(entityType, damage);
+      }
+    }
+  }
 }
 
 /**
@@ -46,12 +103,12 @@ export async function loadAndApplyConfigs(): Promise<void> {
         case 'gameConfig':
           patchGameConfig(data as Record<string, number>);
           break;
-        // case 'unitStats':
-        //   patchUnitStats(data);
-        //   break;
-        // case 'damageTables':
-        //   patchDamageTables(data);
-        //   break;
+        case 'unitStats':
+          patchUnitStats(data);
+          break;
+        case 'damageTables':
+          patchDamageTables(data);
+          break;
         // case 'tiles':
         //   patchTiles(data);
         //   break;
