@@ -16,6 +16,9 @@ export default defineConfig({
     target: 'esnext',
     emptyOutDir: true,
     assetsDir: 'static',
+    // Inline all audio files as data URIs so the game is fully self-contained
+    // (Rosebud Universal mode cannot serve binary assets locally)
+    assetsInlineLimit: 600 * 1024, // 600KB covers all audio files
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),

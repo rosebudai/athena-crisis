@@ -1,0 +1,606 @@
+{
+  "gameTitle": "Athena Crisis",
+  "music": {
+    "prompt": "Looping instrumental background music for 'Athena Crisis' turn-based strategy game. Epic orchestral with military drums, brass fanfares, and sweeping strings. Heroic and tactical mood. ~120 BPM. Seamless loop.",
+    "durationMs": 30000,
+    "file": "music/hestias-serenade.mp3",
+    "generated": true
+  },
+  "sfx": [
+    {
+      "name": "attack_air_to_air_missile",
+      "prompt": "sharp whistling missile launch into air, combat game sound",
+      "durationSeconds": 1,
+      "file": "sfx/attack_air_to_air_missile.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_anti_air_gun",
+      "prompt": "rapid anti-aircraft gunfire burst, military game",
+      "durationSeconds": 1,
+      "file": "sfx/attack_anti_air_gun.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_artillery",
+      "prompt": "deep booming artillery cannon fire, war game",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_artillery.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_artillery_battery",
+      "prompt": "multiple artillery cannons firing sequence, war game",
+      "durationSeconds": 2,
+      "file": "sfx/attack_artillery_battery.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_bite",
+      "prompt": "quick snapping creature bite attack, game sound",
+      "durationSeconds": 0.5,
+      "file": "sfx/attack_bite.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_bomb",
+      "prompt": "heavy bomb dropping and exploding, combat game",
+      "durationSeconds": 2,
+      "file": "sfx/attack_bomb.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_cannon",
+      "prompt": "single heavy cannon blast, military game sound",
+      "durationSeconds": 1,
+      "file": "sfx/attack_cannon.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_club",
+      "prompt": "heavy blunt melee impact thud, combat game",
+      "durationSeconds": 0.5,
+      "file": "sfx/attack_club.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_flamethrower",
+      "prompt": "roaring flame burst, fire weapon game sound",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_flamethrower.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_heavy_artillery",
+      "prompt": "massive deep cannon blast with echo, military",
+      "durationSeconds": 2,
+      "file": "sfx/attack_heavy_artillery.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_heavy_gun",
+      "prompt": "heavy machine gun burst, chunky military game",
+      "durationSeconds": 1,
+      "file": "sfx/attack_heavy_gun.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_light_gun",
+      "prompt": "light rapid gunfire, small caliber game sound",
+      "durationSeconds": 1,
+      "file": "sfx/attack_light_gun.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_mg",
+      "prompt": "sustained machine gun fire, military game sound",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_mg.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_mg_fast",
+      "prompt": "rapid high-rate machine gun fire, military game",
+      "durationSeconds": 1,
+      "file": "sfx/attack_mg_fast.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_mini_gun",
+      "prompt": "spinning minigun burst, fast rotary gun game",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_mini_gun.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_pistol",
+      "prompt": "crisp single pistol shot, handgun game sound",
+      "durationSeconds": 0.5,
+      "file": "sfx/attack_pistol.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_pow",
+      "prompt": "comic punch impact, retro cartoon game sound",
+      "durationSeconds": 0.5,
+      "file": "sfx/attack_pow.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_railgun",
+      "prompt": "electronic charging then zapping laser beam, sci-fi",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_railgun.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_railgun_impact",
+      "prompt": "powerful electric impact after laser hit, sci-fi game",
+      "durationSeconds": 1,
+      "file": "sfx/attack_railgun_impact.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_rocket",
+      "prompt": "whooshing rocket launch with trail, combat game",
+      "durationSeconds": 1,
+      "file": "sfx/attack_rocket.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_rocket_launcher",
+      "prompt": "heavy rocket launcher firing, deep whoosh, military",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_rocket_launcher.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_rockets",
+      "prompt": "multiple small rockets firing in volley, combat game",
+      "durationSeconds": 2,
+      "file": "sfx/attack_rockets.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_sam",
+      "prompt": "surface to air missile launch, defensive military game",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_sam.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_sam_impact",
+      "prompt": "missile impact explosion in sky, anti-air game",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_sam_impact.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_shotgun",
+      "prompt": "powerful shotgun blast, close combat game sound",
+      "durationSeconds": 0.5,
+      "file": "sfx/attack_shotgun.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_sniper_rifle",
+      "prompt": "sharp precise sniper shot with echo, military game",
+      "durationSeconds": 1,
+      "file": "sfx/attack_sniper_rifle.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_tentacle_whip",
+      "prompt": "slimy tentacle whipping through air, creature game",
+      "durationSeconds": 1,
+      "file": "sfx/attack_tentacle_whip.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_torpedo",
+      "prompt": "underwater torpedo launch with bubbles, naval game",
+      "durationSeconds": 1.5,
+      "file": "sfx/attack_torpedo.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_torpedo_impact",
+      "prompt": "underwater explosion from torpedo, naval game",
+      "durationSeconds": 2,
+      "file": "sfx/attack_torpedo_impact.mp3",
+      "generated": true
+    },
+    {
+      "name": "attack_zombie_bite",
+      "prompt": "gruesome zombie biting and chewing, horror game",
+      "durationSeconds": 1,
+      "file": "sfx/attack_zombie_bite.mp3",
+      "generated": true
+    },
+    {
+      "name": "crystal_command",
+      "prompt": "authoritative crystal command chime, magical game",
+      "durationSeconds": 1.5,
+      "file": "sfx/crystal_command.mp3",
+      "generated": true
+    },
+    {
+      "name": "crystal_help",
+      "prompt": "gentle healing crystal tone, soothing magical game",
+      "durationSeconds": 1.5,
+      "file": "sfx/crystal_help.mp3",
+      "generated": true
+    },
+    {
+      "name": "crystal_memory",
+      "prompt": "ethereal memory recall shimmer, dreamy crystal game",
+      "durationSeconds": 1.5,
+      "file": "sfx/crystal_memory.mp3",
+      "generated": true
+    },
+    {
+      "name": "crystal_phantom",
+      "prompt": "ghostly phantom crystal howl, eerie magical game",
+      "durationSeconds": 1.5,
+      "file": "sfx/crystal_phantom.mp3",
+      "generated": true
+    },
+    {
+      "name": "crystal_power",
+      "prompt": "surging power crystal activation, intense magical game",
+      "durationSeconds": 1.5,
+      "file": "sfx/crystal_power.mp3",
+      "generated": true
+    },
+    {
+      "name": "crystal_super",
+      "prompt": "ultimate super crystal burst, epic magical game",
+      "durationSeconds": 2,
+      "file": "sfx/crystal_super.mp3",
+      "generated": true
+    },
+    {
+      "name": "explosion_air",
+      "prompt": "aerial explosion with debris falling, combat game",
+      "durationSeconds": 2,
+      "file": "sfx/explosion_air.mp3",
+      "generated": true
+    },
+    {
+      "name": "explosion_building",
+      "prompt": "large building collapsing explosion, destruction game",
+      "durationSeconds": 2,
+      "file": "sfx/explosion_building.mp3",
+      "generated": true
+    },
+    {
+      "name": "explosion_ground",
+      "prompt": "ground explosion with dirt and rocks, combat game",
+      "durationSeconds": 2,
+      "file": "sfx/explosion_ground.mp3",
+      "generated": true
+    },
+    {
+      "name": "explosion_infantry",
+      "prompt": "small quick infantry explosion burst, combat game",
+      "durationSeconds": 1,
+      "file": "sfx/explosion_infantry.mp3",
+      "generated": true
+    },
+    {
+      "name": "explosion_naval",
+      "prompt": "naval water explosion with splash, sea combat game",
+      "durationSeconds": 2,
+      "file": "sfx/explosion_naval.mp3",
+      "generated": true
+    },
+    {
+      "name": "explosion_impact",
+      "prompt": "heavy impact shockwave rumble after explosion, game",
+      "durationSeconds": 1.5,
+      "file": "sfx/explosion_impact.mp3",
+      "generated": true
+    },
+    {
+      "name": "fireworks",
+      "prompt": "colorful fireworks popping and crackling, celebration",
+      "durationSeconds": 3,
+      "file": "sfx/fireworks.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_air",
+      "prompt": "jet aircraft engine steady flying drone, military game",
+      "durationSeconds": 2,
+      "file": "sfx/movement_air.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_air_end",
+      "prompt": "jet engine powering down and stopping, military game",
+      "durationSeconds": 1,
+      "file": "sfx/movement_air_end.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_air_infantry",
+      "prompt": "helicopter rotor chopping through air, military game",
+      "durationSeconds": 2,
+      "file": "sfx/movement_air_infantry.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_air_infantry_end",
+      "prompt": "helicopter rotor slowing and stopping, military game",
+      "durationSeconds": 1,
+      "file": "sfx/movement_air_infantry_end.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_amphibious",
+      "prompt": "amphibious vehicle splashing through water, military",
+      "durationSeconds": 2,
+      "file": "sfx/movement_amphibious.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_heavy_soldier",
+      "prompt": "heavy armored boots marching on ground, military game",
+      "durationSeconds": 2,
+      "file": "sfx/movement_heavy_soldier.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_heavy_soldier_end",
+      "prompt": "heavy boots stopping on ground, military game",
+      "durationSeconds": 0.5,
+      "file": "sfx/movement_heavy_soldier_end.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_low_altitude",
+      "prompt": "low flying drone buzzing, military game sound",
+      "durationSeconds": 2,
+      "file": "sfx/movement_low_altitude.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_rail",
+      "prompt": "train on rails chugging along, military game",
+      "durationSeconds": 2,
+      "file": "sfx/movement_rail.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_rail_end",
+      "prompt": "train braking and stopping on rails, military game",
+      "durationSeconds": 1,
+      "file": "sfx/movement_rail_end.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_ship",
+      "prompt": "naval ship engine humming on water, military game",
+      "durationSeconds": 2,
+      "file": "sfx/movement_ship.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_soldier",
+      "prompt": "light infantry footsteps on ground, military game",
+      "durationSeconds": 2,
+      "file": "sfx/movement_soldier.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_soldier_end",
+      "prompt": "soldier footsteps stopping, boots settle, military",
+      "durationSeconds": 0.5,
+      "file": "sfx/movement_soldier_end.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_tires",
+      "prompt": "vehicle tires rolling on road, military game sound",
+      "durationSeconds": 2,
+      "file": "sfx/movement_tires.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_tires_end",
+      "prompt": "vehicle tires screeching to stop, military game",
+      "durationSeconds": 1,
+      "file": "sfx/movement_tires_end.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_tread",
+      "prompt": "tank treads clanking on ground, military game",
+      "durationSeconds": 2,
+      "file": "sfx/movement_tread.mp3",
+      "generated": true
+    },
+    {
+      "name": "movement_tread_end",
+      "prompt": "tank treads stopping with metallic clank, military",
+      "durationSeconds": 1,
+      "file": "sfx/movement_tread_end.mp3",
+      "generated": true
+    },
+    {
+      "name": "talking_high",
+      "prompt": "high pitched rapid beeping speech, game dialog chirp",
+      "durationSeconds": 0.5,
+      "file": "sfx/talking_high.mp3",
+      "generated": true
+    },
+    {
+      "name": "talking_low",
+      "prompt": "low pitched slow buzzing speech, game dialog rumble",
+      "durationSeconds": 0.5,
+      "file": "sfx/talking_low.mp3",
+      "generated": true
+    },
+    {
+      "name": "talking_mid",
+      "prompt": "medium pitched chirping speech, game dialog beep",
+      "durationSeconds": 0.5,
+      "file": "sfx/talking_mid.mp3",
+      "generated": true
+    },
+    {
+      "name": "ui_accept",
+      "prompt": "satisfying bright confirm chime, UI game sound",
+      "durationSeconds": 0.5,
+      "file": "sfx/ui_accept.mp3",
+      "generated": true
+    },
+    {
+      "name": "ui_cancel",
+      "prompt": "soft gentle reject tone, UI game sound",
+      "durationSeconds": 0.5,
+      "file": "sfx/ui_cancel.mp3",
+      "generated": true
+    },
+    {
+      "name": "ui_long_press",
+      "prompt": "sustained press and hold tone building, UI game",
+      "durationSeconds": 1,
+      "file": "sfx/ui_long_press.mp3",
+      "generated": true
+    },
+    {
+      "name": "ui_next",
+      "prompt": "quick forward navigation click, snappy UI game",
+      "durationSeconds": 0.5,
+      "file": "sfx/ui_next.mp3",
+      "generated": true
+    },
+    {
+      "name": "ui_previous",
+      "prompt": "quick backward navigation click, snappy UI game",
+      "durationSeconds": 0.5,
+      "file": "sfx/ui_previous.mp3",
+      "generated": true
+    },
+    {
+      "name": "ui_put",
+      "prompt": "soft placement thud on surface, UI game sound",
+      "durationSeconds": 0.5,
+      "file": "sfx/ui_put.mp3",
+      "generated": true
+    },
+    {
+      "name": "ui_skip",
+      "prompt": "quick skip whoosh forward, UI game sound",
+      "durationSeconds": 0.5,
+      "file": "sfx/ui_skip.mp3",
+      "generated": true
+    },
+    {
+      "name": "ui_start",
+      "prompt": "exciting ascending game start fanfare, UI game",
+      "durationSeconds": 1,
+      "file": "sfx/ui_start.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_artillery_fold",
+      "prompt": "artillery cannon folding down mechanically, military",
+      "durationSeconds": 1,
+      "file": "sfx/unit_artillery_fold.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_artillery_unfold",
+      "prompt": "artillery cannon deploying and unfolding, military",
+      "durationSeconds": 1,
+      "file": "sfx/unit_artillery_unfold.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_cannon_fold",
+      "prompt": "cannon retracting and folding, mechanical military",
+      "durationSeconds": 1,
+      "file": "sfx/unit_cannon_fold.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_cannon_unfold",
+      "prompt": "cannon extending and deploying, mechanical military",
+      "durationSeconds": 1,
+      "file": "sfx/unit_cannon_unfold.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_capture",
+      "prompt": "flag raising victory capture jingle, military game",
+      "durationSeconds": 1.5,
+      "file": "sfx/unit_capture.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_create_building",
+      "prompt": "construction hammering and building, building game",
+      "durationSeconds": 1.5,
+      "file": "sfx/unit_create_building.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_drop",
+      "prompt": "unit dropping from transport, parachute deploy game",
+      "durationSeconds": 1,
+      "file": "sfx/unit_drop.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_heal",
+      "prompt": "magical healing sparkle, health restore game sound",
+      "durationSeconds": 1,
+      "file": "sfx/unit_heal.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_load",
+      "prompt": "unit loading into transport vehicle, military game",
+      "durationSeconds": 1,
+      "file": "sfx/unit_load.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_sabotage",
+      "prompt": "sneaky sabotage explosion, covert operation game",
+      "durationSeconds": 1.5,
+      "file": "sfx/unit_sabotage.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_sniper_fold",
+      "prompt": "sniper rifle folding and packing away, military game",
+      "durationSeconds": 1,
+      "file": "sfx/unit_sniper_fold.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_sniper_unfold",
+      "prompt": "sniper rifle deploying and readying, military game",
+      "durationSeconds": 1,
+      "file": "sfx/unit_sniper_unfold.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_spawn",
+      "prompt": "unit materializing digital spawn effect, game sound",
+      "durationSeconds": 1,
+      "file": "sfx/unit_spawn.mp3",
+      "generated": true
+    },
+    {
+      "name": "unit_supply",
+      "prompt": "supply crate delivery dropping, resupply game sound",
+      "durationSeconds": 1,
+      "file": "sfx/unit_supply.mp3",
+      "generated": true
+    }
+  ]
+}

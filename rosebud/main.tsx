@@ -8,6 +8,7 @@ import {
 import convertBiome from '@deities/athena/lib/convertBiome.tsx';
 import { Biome } from '@deities/athena/map/Biome.tsx';
 import MapData, { SizeVector } from '@deities/athena/MapData.tsx';
+import { biomeToSong } from '@deities/hera/audio/Music.tsx';
 import GameMap from '@deities/hera/GameMap.tsx';
 import useClientGame from '@deities/hera/hooks/useClientGame.tsx';
 import useClientGameAction from '@deities/hera/hooks/useClientGameAction.tsx';
@@ -31,7 +32,7 @@ import { AlertContext } from '@deities/ui/hooks/useAlert.tsx';
 import useScale, { ScaleContext } from '@deities/ui/hooks/useScale.tsx';
 import { css } from '@emotion/css';
 import { VisibilityStateContext } from '@nkzw/use-visibility-state';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 // Initialize global CSS (variables, global styles)
@@ -41,8 +42,9 @@ initializeCSS();
 // Prepare sprite CSS classes (async, loads from CDN)
 prepareSprites();
 
-// Pause audio by default for standalone builds
-AudioPlayer.pause();
+// Enable audio - sound files are generated via ElevenLabs
+AudioPlayer.resume();
+AudioPlayer.preload();
 
 const startAction = { type: 'Start' } as const;
 
@@ -64,7 +66,7 @@ const mapCatalog: ReadonlyArray<MapEntry> = [
     map: demo1,
     metadata: metadata1,
     size: '15x10',
-    tags: metadata1.tags || [],
+    tags: ['beginner'],
   },
   {
     id: 'demo-2',
@@ -72,7 +74,7 @@ const mapCatalog: ReadonlyArray<MapEntry> = [
     map: demo2,
     metadata: metadata2,
     size: '15x10',
-    tags: metadata2.tags || [],
+    tags: ['beginner'],
   },
   {
     id: 'demo-3',
@@ -80,7 +82,7 @@ const mapCatalog: ReadonlyArray<MapEntry> = [
     map: demo3,
     metadata: metadata3,
     size: '17x11',
-    tags: metadata3.tags || [],
+    tags: ['intermediate'],
   },
   {
     id: 'shrine',
@@ -88,7 +90,7 @@ const mapCatalog: ReadonlyArray<MapEntry> = [
     map: shrine,
     metadata: metadataShrine,
     size: '12x10',
-    tags: metadataShrine.tags || [],
+    tags: ['story', 'reward'],
   },
   {
     id: 'they-are-close-to-home',
@@ -96,7 +98,7 @@ const mapCatalog: ReadonlyArray<MapEntry> = [
     map: theyAreCloseToHome,
     metadata: metadataTheyAreCloseToHome,
     size: '22x10',
-    tags: metadataTheyAreCloseToHome.tags || [],
+    tags: ['hard', 'story'],
   },
 ];
 
@@ -345,19 +347,119 @@ const overlayButtonRow = css`
   justify-content: center;
 `;
 
+const gameMapWrapperStyle = css`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+  background: #1b1b23;
+  overflow: hidden;
+`;
+
+const howToContainerStyle = css`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #1b1b23;
+  color: #e0e0e0;
+  font-family: Athena, sans-serif;
+  padding: 40px 20px;
+  box-sizing: border-box;
+`;
+
+const howToHeadingStyle = css`
+  font-size: 32px;
+  font-weight: bold;
+  color: #ff6b6b;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  margin-bottom: 32px;
+  text-align: center;
+`;
+
+const howToListStyle = css`
+  list-style: none;
+  padding: 0;
+  margin: 0 0 36px 0;
+  max-width: 480px;
+  width: 100%;
+`;
+
+const howToItemStyle = css`
+  margin-bottom: 16px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #e0e0e0;
+`;
+
+const howToLabelStyle = css`
+  font-weight: bold;
+  color: #ff6b6b;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-right: 8px;
+`;
+
 // --- Screen types ---
 
-type Screen = 'title' | 'select' | 'playing';
+type Screen = 'title' | 'select' | 'playing' | 'howto';
 
 // --- Components ---
 
-function TitleScreen({ onPlay }: { onPlay: () => void }) {
+function TitleScreen({ onPlay, onHowToPlay }: { onPlay: () => void; onHowToPlay: () => void }) {
   return (
     <div className={containerStyle}>
       <h1 className={titleStyle}>Athena Crisis</h1>
       <p className={subtitleStyle}>Turn-Based Strategy</p>
       <button className={buttonStyle} onClick={onPlay}>
         Play
+      </button>
+      <button className={secondaryButtonStyle} onClick={onHowToPlay} style={{ marginTop: 16 }}>
+        How to Play
+      </button>
+    </div>
+  );
+}
+
+function HowToPlay({ onBack }: { onBack: () => void }) {
+  return (
+    <div className={howToContainerStyle}>
+      <h2 className={howToHeadingStyle}>How to Play</h2>
+      <ul className={howToListStyle}>
+        <li className={howToItemStyle}>
+          <span className={howToLabelStyle}>Select:</span>
+          Tap/click a unit to select it.
+        </li>
+        <li className={howToItemStyle}>
+          <span className={howToLabelStyle}>Move:</span>
+          Tap a highlighted blue tile to move.
+        </li>
+        <li className={howToItemStyle}>
+          <span className={howToLabelStyle}>Attack:</span>
+          Tap a highlighted red tile to attack.
+        </li>
+        <li className={howToItemStyle}>
+          <span className={howToLabelStyle}>End Turn:</span>
+          Press the arrow button (bottom right) to end your turn.
+        </li>
+        <li className={howToItemStyle}>
+          <span className={howToLabelStyle}>Undo:</span>
+          Press the undo button to take back a move.
+        </li>
+        <li className={howToItemStyle}>
+          <span className={howToLabelStyle}>Info:</span>
+          Press the info button (&#8505;) to see objectives.
+        </li>
+        <li className={howToItemStyle}>
+          <span className={howToLabelStyle}>Buildings:</span>
+          Move infantry onto enemy buildings to capture them.
+        </li>
+      </ul>
+      <button className={secondaryButtonStyle} onClick={onBack}>
+        Back
       </button>
     </div>
   );
@@ -478,11 +580,13 @@ function GameOverOverlay({
 }
 
 function PlaygroundGame({
+  biome,
   map,
   metadata,
   onPlayAgain,
   onBackToMenu,
 }: {
+  biome: Biome;
   map: MapData;
   metadata?: MapMetadata;
   onPlayAgain: () => void;
@@ -490,6 +594,15 @@ function PlaygroundGame({
 }) {
   const [renderKey, setRenderKey] = useState(0);
   const zoom = useScale();
+
+  // Play biome-appropriate music when game starts or biome changes
+  const song = biomeToSong(biome, metadata?.tags);
+  useEffect(() => {
+    AudioPlayer.play(song);
+    return () => {
+      AudioPlayer.stopCurrentSong();
+    };
+  }, [song]);
 
   const [game, setGame, undo] = useClientGame(
     map,
@@ -509,53 +622,55 @@ function PlaygroundGame({
   const fade = renderKey === 0;
 
   return (
-    <GameMap
-      autoPanning
-      currentUserId={DemoViewer.id}
-      fogStyle="soft"
-      key={`play-demo-map-${renderKey}`}
-      lastActionResponse={game.lastAction}
-      map={game.state}
-      margin="minimal"
-      onAction={onAction}
-      pan
-      playerDetails={playerDetails}
-      scale={zoom}
-      scroll={false}
-      style="floating"
-      tilted
-    >
-      {(props, actions) => {
-        const gameEnd = props.lastActionResponse?.type === 'GameEnd';
-        const isVictory =
-          gameEnd &&
-          props.lastActionResponse != null &&
-          'toPlayer' in props.lastActionResponse &&
-          props.lastActionResponse.toPlayer === 1;
+    <div className={gameMapWrapperStyle}>
+      <GameMap
+        autoPanning
+        currentUserId={DemoViewer.id}
+        fogStyle="soft"
+        key={`play-demo-map-${renderKey}`}
+        lastActionResponse={game.lastAction}
+        map={game.state}
+        margin="minimal"
+        onAction={onAction}
+        pan
+        playerDetails={playerDetails}
+        scale={zoom}
+        scroll={false}
+        style="floating"
+        tilted
+      >
+        {(props, actions) => {
+          const gameEnd = props.lastActionResponse?.type === 'GameEnd';
+          const isVictory =
+            gameEnd &&
+            props.lastActionResponse != null &&
+            'toPlayer' in props.lastActionResponse &&
+            props.lastActionResponse.toPlayer === 1;
 
-        return (
-          <>
-            <MapInfo hide={gameEnd} {...props} />
-            <GameActions
-              actions={actions}
-              canUndoAction
-              fade={fade}
-              hide={gameEnd}
-              state={props}
-              undo={onUndo}
-              zoom={zoom}
-            />
-            {gameEnd && (
-              <GameOverOverlay
-                isVictory={!!isVictory}
-                onPlayAgain={onPlayAgain}
-                onBackToMenu={onBackToMenu}
+          return (
+            <>
+              <MapInfo hide={gameEnd} {...props} />
+              <GameActions
+                actions={actions}
+                canUndoAction
+                fade={fade}
+                hide={gameEnd}
+                state={props}
+                undo={onUndo}
+                zoom={zoom}
               />
-            )}
-          </>
-        );
-      }}
-    </GameMap>
+              {gameEnd && (
+                <GameOverOverlay
+                  isVictory={!!isVictory}
+                  onPlayAgain={onPlayAgain}
+                  onBackToMenu={onBackToMenu}
+                />
+              )}
+            </>
+          );
+        }}
+      </GameMap>
+    </div>
   );
 }
 
@@ -573,6 +688,10 @@ function App() {
 
   const handlePlay = useCallback(() => {
     setScreen('select');
+  }, []);
+
+  const handleHowToPlay = useCallback(() => {
+    setScreen('howto');
   }, []);
 
   const handleBack = useCallback(() => {
@@ -609,6 +728,7 @@ function App() {
     if (screen !== 'playing' || !gameConfig) return null;
     return (
       <PlaygroundGame
+        biome={gameConfig.biome}
         key={gameKey}
         map={gameConfig.map}
         metadata={gameConfig.metadata}
@@ -623,7 +743,10 @@ function App() {
       <ScaleContext>
         <VisibilityStateContext>
           <AlertContext>
-            {screen === 'title' && <TitleScreen onPlay={handlePlay} />}
+            {screen === 'title' && (
+              <TitleScreen onPlay={handlePlay} onHowToPlay={handleHowToPlay} />
+            )}
+            {screen === 'howto' && <HowToPlay onBack={handleBack} />}
             {screen === 'select' && <LevelSelect onBack={handleBack} onStart={handleStart} />}
             {screen === 'playing' && gameElement}
           </AlertContext>
