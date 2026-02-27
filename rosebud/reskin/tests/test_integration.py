@@ -109,8 +109,8 @@ def test_full_suite_passes():
     result = subprocess.run(
         [
             sys.executable, "-m", "pytest",
-            "utils/reskin/tests/", "-v",
-            "--ignore=utils/reskin/tests/test_integration.py",
+            "rosebud/reskin/tests/", "-v",
+            "--ignore=rosebud/reskin/tests/test_integration.py",
         ],
         capture_output=True,
         text=True,

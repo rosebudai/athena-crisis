@@ -2,7 +2,7 @@ import json
 import os
 import pytest
 
-from utils.reskin.manifest import Manifest
+from rosebud.reskin.manifest import Manifest
 
 
 @pytest.fixture

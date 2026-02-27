@@ -7,9 +7,9 @@ import json
 import os
 import sys
 
-# Ensure utils/reskin is on the path when run directly as a script.
+# Ensure rosebud/reskin is on the path when run directly as a script.
 # Also add the repo root so that submodule package imports work
-# (e.g., echo.py's "from utils.reskin.providers.base import ...").
+# (e.g., echo.py's "from rosebud.reskin.providers.base import ...").
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
