@@ -6,6 +6,7 @@ export default process.env.IS_LANDING_PAGE
         ...window.location,
         key: '',
         state: null,
+        unstable_mask: undefined,
       };
     }
   : _useLocation;
