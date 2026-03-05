@@ -32,6 +32,9 @@ def get_provider(name: str) -> ReskinProvider:
     if name == "fal_gemini":
         from providers.fal_gemini import FalGeminiProvider
         return FalGeminiProvider()
+    if name == "nano_banana":
+        from providers.nano_banana import NanoBananaProvider
+        return NanoBananaProvider()
     raise ValueError(f"Unknown provider: {name}")
 
 
@@ -106,9 +109,11 @@ def run_batch(args, theme, provider):
     assets = discover_assets(
         args.repo_root, category=args.category
     )
+    if args.name:
+        assets = [a for a in assets if a.name == args.name]
     print(f"Discovered {len(assets)} assets")
     if not assets:
-        print("No assets found. Check category filter.")
+        print("No assets found. Check category/name filter.")
         sys.exit(1)
 
     theme_output = os.path.join(args.output_dir, theme.name)
@@ -189,6 +194,10 @@ def main():
         help="Process only this category",
     )
     parser.add_argument(
+        "--name",
+        help="Process only this sprite name (e.g. Units-Tank)",
+    )
+    parser.add_argument(
         "--provider", default="echo",
         help="AI provider name (default: echo)",
     )
@@ -239,10 +248,12 @@ def main():
 
     # Standard mode: process assets one at a time
     assets = discover_assets(args.repo_root, category=args.category)
+    if args.name:
+        assets = [a for a in assets if a.name == args.name]
     print(f"Discovered {len(assets)} assets")
 
     if not assets:
-        print("No assets found. Check category filter.")
+        print("No assets found. Check category/name filter.")
         sys.exit(1)
 
     # Load or create manifest

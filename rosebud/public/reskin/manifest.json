@@ -1,4 +1,4 @@
 {
   "basePath": "reskin/cyberpunk",
-  "sprites": ["Portraits", "Buildings", "Building-Create", "Units-Infantry"]
+  "sprites": ["Portraits", "Buildings", "Building-Create", "Units-Infantry", "Units-SmallTank"]
 }
