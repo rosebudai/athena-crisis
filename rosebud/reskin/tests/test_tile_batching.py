@@ -517,6 +517,209 @@ class TestSnapToPalette:
 
 
 # ---------------------------------------------------------------------------
+# _lab_to_rgb  (inverse LAB -> RGB conversion)
+# ---------------------------------------------------------------------------
+
+class TestLabToRgb:
+    def test_round_trip_white(self):
+        """RGB [255,255,255] -> LAB -> RGB should round-trip with max diff <= 1."""
+        rgb_in = np.array([[255, 255, 255]], dtype=np.uint8)
+        lab = reskin_tiles._rgb_to_lab(rgb_in)
+        rgb_out = reskin_tiles._lab_to_rgb(lab)
+        assert np.abs(rgb_out.astype(int) - rgb_in.astype(int)).max() <= 1
+
+    def test_round_trip_black(self):
+        """RGB [0,0,0] -> LAB -> RGB should round-trip with max diff <= 1."""
+        rgb_in = np.array([[0, 0, 0]], dtype=np.uint8)
+        lab = reskin_tiles._rgb_to_lab(rgb_in)
+        rgb_out = reskin_tiles._lab_to_rgb(lab)
+        assert np.abs(rgb_out.astype(int) - rgb_in.astype(int)).max() <= 1
+
+    def test_round_trip_green(self):
+        """RGB [0,200,0] -> LAB -> RGB should round-trip with max diff <= 1."""
+        rgb_in = np.array([[0, 200, 0]], dtype=np.uint8)
+        lab = reskin_tiles._rgb_to_lab(rgb_in)
+        rgb_out = reskin_tiles._lab_to_rgb(lab)
+        assert np.abs(rgb_out.astype(int) - rgb_in.astype(int)).max() <= 1
+
+    def test_round_trip_batch(self):
+        """Random batch of 50 colors -> LAB -> RGB should all round-trip with max diff <= 1."""
+        rng = np.random.default_rng(42)
+        rgb_in = rng.integers(0, 256, size=(50, 3), dtype=np.uint8)
+        lab = reskin_tiles._rgb_to_lab(rgb_in)
+        rgb_out = reskin_tiles._lab_to_rgb(lab)
+        diff = np.abs(rgb_out.astype(int) - rgb_in.astype(int))
+        assert diff.max() <= 1, f"Max round-trip diff = {diff.max()}, failing rows: {np.argwhere(diff > 1)}"
+
+
+# ---------------------------------------------------------------------------
+# harmonize_transitions
+# ---------------------------------------------------------------------------
+
+class TestHarmonizeTransitions:
+    def _make_atlas(self, width, height, color=(100, 160, 60, 255)):
+        """Create a minimal atlas image filled with a single color."""
+        return Image.new("RGBA", (width, height), color)
+
+    def _make_cell_info(self, col, row, cell_type="plain"):
+        return {
+            "col": col,
+            "row": row,
+            "x": col * reskin_tiles.TILE_SIZE,
+            "y": row * reskin_tiles.TILE_SIZE,
+            "type": cell_type,
+        }
+
+    def test_no_transition_cells_unchanged(self, tmp_path):
+        """If all cells are type='plain', they should be returned unchanged."""
+        atlas_w = 12 * reskin_tiles.TILE_SIZE
+        atlas_h = 145 * reskin_tiles.TILE_SIZE
+        atlas = self._make_atlas(atlas_w, atlas_h, color=(80, 140, 50, 255))
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        img_a = Image.new("RGBA", (reskin_tiles.TILE_SIZE, reskin_tiles.TILE_SIZE), (90, 150, 60, 255))
+        img_b = Image.new("RGBA", (reskin_tiles.TILE_SIZE, reskin_tiles.TILE_SIZE), (85, 145, 55, 255))
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), img_a),
+            (self._make_cell_info(1, 0, "plain"), img_b),
+        ]
+
+        result = reskin_tiles.harmonize_transitions(cells, atlas_path)
+
+        assert len(result) == 2
+        np.testing.assert_array_equal(np.array(result[0][1]), np.array(img_a))
+        np.testing.assert_array_equal(np.array(result[1][1]), np.array(img_b))
+
+    def test_beach_cells_harmonized(self, tmp_path):
+        """Beach cells (water type, row >= 50) should have land pixels shifted toward plain green."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Build atlas with grass-colored pixels at (col=3, row=55) — the beach cell location
+        # The original atlas at that cell has green hue pixels for grass detection
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        # Fill the beach cell (col=3, row=55) with green (grass-like) pixels
+        y0, x0 = 55 * ts, 3 * ts
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [60, 180, 40, 255]  # hue ~110, sat high -> grass
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Plain cell (reference) — bright green
+        plain_img = Image.new("RGBA", (ts, ts), (50, 200, 30, 255))
+        # Beach cell (transition) — different green for land portions
+        beach_img = Image.new("RGBA", (ts, ts), (100, 140, 80, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(3, 55, "water"), beach_img),
+        ]
+
+        result = reskin_tiles.harmonize_transitions(cells, atlas_path)
+
+        # The beach cell should have been modified
+        beach_out = np.array(result[1][1])
+        beach_in = np.array(beach_img)
+        # At least some pixels should differ (grass pixels were shifted toward plain ref)
+        assert not np.array_equal(beach_out[:, :, :3], beach_in[:, :, :3]), \
+            "Beach cell should be modified by harmonization"
+
+    def test_strength_zero_no_change(self, tmp_path):
+        """With strength=0.0, all cells should be returned unchanged."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Build atlas with green pixels at beach cell for grass classification
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        y0, x0 = 55 * ts, 3 * ts
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [60, 180, 40, 255]
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        plain_img = Image.new("RGBA", (ts, ts), (50, 200, 30, 255))
+        beach_img = Image.new("RGBA", (ts, ts), (100, 140, 80, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(3, 55, "water"), beach_img),
+        ]
+
+        result = reskin_tiles.harmonize_transitions(cells, atlas_path, strength=0.0)
+
+        # With strength=0, the shift vector is multiplied by 0, so no change
+        for (_, img_in), (_, img_out) in zip(cells, result):
+            np.testing.assert_array_equal(np.array(img_out), np.array(img_in))
+
+    def test_transparent_pixels_unchanged(self, tmp_path):
+        """Fully transparent transition cells should pass through unchanged."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Need a plain cell for reference, otherwise harmonize bails out early
+        plain_img = Image.new("RGBA", (ts, ts), (50, 200, 30, 255))
+        # Fully transparent beach cell
+        transparent_img = Image.new("RGBA", (ts, ts), (0, 0, 0, 0))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(3, 55, "water"), transparent_img),
+        ]
+
+        result = reskin_tiles.harmonize_transitions(cells, atlas_path)
+
+        beach_out = np.array(result[1][1])
+        assert beach_out[:, :, 3].max() == 0, "Transparent pixels should remain transparent"
+
+    def test_water_reference_from_sea_rows(self, tmp_path):
+        """Water reference should be computed only from water cells with row < 50."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Build atlas with blue water pixels at the beach cell
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        y0, x0 = 55 * ts, 3 * ts
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [30, 60, 220, 255]  # blue hue ~230, water-like
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Plain cell for grass reference
+        plain_img = Image.new("RGBA", (ts, ts), (50, 200, 30, 255))
+        # Sea cell (row < 50) — this is the water reference
+        sea_color = (20, 80, 200, 255)
+        sea_img = Image.new("RGBA", (ts, ts), sea_color)
+        # Beach cell at row=55 (water type, row >= 50) — NOT used as water reference
+        beach_water_img = Image.new("RGBA", (ts, ts), (100, 100, 255, 255))
+        # Another water cell at row=60 — also NOT used as reference (row >= 50)
+        other_beach_img = Image.new("RGBA", (ts, ts), (200, 200, 255, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(8, 35, "water"), sea_img),       # row < 50 -> IS reference
+            (self._make_cell_info(3, 55, "water"), beach_water_img),  # row >= 50 -> NOT reference
+            (self._make_cell_info(4, 60, "water"), other_beach_img),  # row >= 50 -> NOT reference
+        ]
+
+        result = reskin_tiles.harmonize_transitions(cells, atlas_path)
+
+        # The sea cell (row 35) should be unchanged — it's not a transition cell
+        sea_out = np.array(result[1][1])
+        np.testing.assert_array_equal(sea_out, np.array(sea_img)), \
+            "Sea cell (row < 50) should not be modified — it is a reference, not a transition"
+
+
+# ---------------------------------------------------------------------------
 # extract_palette
 # ---------------------------------------------------------------------------
 
