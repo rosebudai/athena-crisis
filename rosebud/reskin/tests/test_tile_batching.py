@@ -975,13 +975,12 @@ class TestCompositeFeatureBackgrounds:
         # The output should differ from the original forest color
         assert not np.array_equal(out_arr[:, :, :3], original_arr[:, :, :3]), \
             "Forest cell pixels should have been replaced by compositing"
-        # The replacement color should be close to the reskinned plain color
-        # (not exact due to LANCZOS downscale of the anchor image)
+        # The replacement color should match the reskinned plain color exactly
+        # (NEAREST downscale preserves pixel art values)
         center = ts // 2  # check center pixel to avoid edge artifacts
-        np.testing.assert_allclose(
-            out_arr[center, center, :3].astype(float),
+        np.testing.assert_array_equal(
+            out_arr[center, center, :3],
             list(reskinned_color[:3]),
-            atol=35,  # allow for LANCZOS interpolation at edges
         )
 
     def test_water_cells_skipped(self, tmp_path):
@@ -1203,5 +1202,5 @@ class TestExtendedWaterHarmonization:
 
         target_out = np.array(result[2][1])
         target_in = np.array(target_img)
-        np.testing.assert_array_equal(target_out, target_in), \
-            "Non-water-hue pixels in water cells should not be modified"
+        np.testing.assert_array_equal(target_out, target_in,
+            err_msg="Non-water-hue pixels in water cells should not be modified")

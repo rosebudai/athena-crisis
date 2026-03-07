@@ -356,6 +356,71 @@ def _lab_to_rgb(lab_array: np.ndarray) -> np.ndarray:
     return np.round(srgb).astype(np.uint8)
 
 
+def _rgb_to_hsv_arrays(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Convert RGB uint8 array (H,W,3) to hue (0-360), saturation (0-1), value (0-1) arrays.
+
+    Parameters
+    ----------
+    rgb : np.ndarray of shape (H, W, 3), dtype uint8
+
+    Returns
+    -------
+    hue : np.ndarray (H, W) float64, degrees 0-360
+    sat : np.ndarray (H, W) float64, 0-1
+    val : np.ndarray (H, W) float64, 0-1
+    """
+    rgb_f = rgb.astype(np.float64) / 255.0
+
+    cmax = rgb_f.max(axis=2)
+    cmin = rgb_f.min(axis=2)
+    delta = cmax - cmin
+
+    hue = np.zeros_like(cmax)
+    r, g, b = rgb_f[:, :, 0], rgb_f[:, :, 1], rgb_f[:, :, 2]
+
+    mask_r = (cmax == r) & (delta > 0)
+    mask_g = (cmax == g) & (delta > 0) & ~mask_r
+    mask_b = (delta > 0) & ~mask_r & ~mask_g
+
+    hue[mask_r] = 60.0 * (((g[mask_r] - b[mask_r]) / delta[mask_r]) % 6.0)
+    hue[mask_g] = 60.0 * ((b[mask_g] - r[mask_g]) / delta[mask_g] + 2.0)
+    hue[mask_b] = 60.0 * ((r[mask_b] - g[mask_b]) / delta[mask_b] + 4.0)
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        sat = np.where(cmax > 0, delta / cmax, 0.0)
+
+    return hue, sat, cmax
+
+
+def _shift_masked_pixels(arr: np.ndarray, mask: np.ndarray, ref_lab: np.ndarray, strength: float) -> bool:
+    """Shift pixels identified by mask toward ref_lab in LAB space.
+
+    Extracts RGB pixels from *arr* at positions where *mask* is True,
+    converts to LAB, blends toward *ref_lab* by *strength*, converts
+    back, and writes the result into *arr* in-place.
+
+    Parameters
+    ----------
+    arr : np.ndarray (H, W, 4) uint8 — the RGBA image array (modified in-place)
+    mask : np.ndarray (H, W) bool — which pixels to shift
+    ref_lab : np.ndarray (3,) — target LAB color to shift toward
+    strength : float in [0, 1] — 0 = no change, 1 = full shift
+
+    Returns
+    -------
+    bool : True if any pixels were modified
+    """
+    if not mask.any():
+        return False
+    px_rgb = arr[:, :, :3][mask].astype(np.float64)
+    px_lab = _rgb_to_lab(px_rgb)
+    shift = (ref_lab[np.newaxis, :] - px_lab) * strength
+    shifted_lab = px_lab + shift
+    shifted_rgb = _lab_to_rgb(shifted_lab)
+    arr[:, :, :3][mask] = shifted_rgb
+    return True
+
+
 # Modifier x-offset ranges for each animation (from Tile.tsx modifier definitions).
 # Used by the conservative init to estimate which columns each animation uses.
 _ANIM_COL_OFFSETS: dict[str, tuple[int, int]] = {
@@ -800,7 +865,7 @@ def _extract_plain_tile_from_anchor(anchor_path: str) -> Image.Image:
     native_h = 1 * cell_h + 2 * GRID_LINE_WIDTH
 
     # Downscale from 4x to native
-    native_img = anchor_img.resize((native_w, native_h), Image.LANCZOS)
+    native_img = anchor_img.resize((native_w, native_h), Image.NEAREST)
 
     # The tile content starts after the grid line and padding
     tile_x = GRID_LINE_WIDTH + CELL_PADDING
@@ -877,27 +942,8 @@ def composite_feature_backgrounds(
         if not visible.any():
             continue
 
-        # Classify original pixels using HSV (same pattern as harmonize_transitions)
-        orig_rgb = orig_arr[:, :, :3].astype(np.float64) / 255.0
-
-        cmax = orig_rgb.max(axis=2)
-        cmin = orig_rgb.min(axis=2)
-        delta = cmax - cmin
-
-        # Hue calculation
-        hue = np.zeros_like(cmax)
-        r, g, b = orig_rgb[:, :, 0], orig_rgb[:, :, 1], orig_rgb[:, :, 2]
-
-        mask_r = (cmax == r) & (delta > 0)
-        mask_g = (cmax == g) & (delta > 0) & ~mask_r
-        mask_b = (delta > 0) & ~mask_r & ~mask_g
-
-        hue[mask_r] = 60.0 * (((g[mask_r] - b[mask_r]) / delta[mask_r]) % 6.0)
-        hue[mask_g] = 60.0 * ((b[mask_g] - r[mask_g]) / delta[mask_g] + 2.0)
-        hue[mask_b] = 60.0 * ((r[mask_b] - g[mask_b]) / delta[mask_b] + 4.0)
-
-        # Saturation (0-1 scale)
-        sat = np.where(cmax > 0, delta / cmax, 0.0)
+        # Classify original pixels using HSV
+        hue, sat, _ = _rgb_to_hsv_arrays(orig_arr[:, :, :3])
 
         # Grass-like mask: visible, hue 60-160, sat > 0.20
         grass_mask = visible & (hue >= 60) & (hue <= 160) & (sat > 0.20)
@@ -1096,27 +1142,7 @@ def harmonize_transitions(
         orig_arr = np.array(orig_cell)
 
         # Classify original pixels using HSV
-        orig_rgb = orig_arr[:, :, :3].astype(np.float64) / 255.0
-
-        # Manual RGB -> HSV (vectorized)
-        cmax = orig_rgb.max(axis=2)
-        cmin = orig_rgb.min(axis=2)
-        delta = cmax - cmin
-
-        # Hue calculation
-        hue = np.zeros_like(cmax)
-        r, g, b = orig_rgb[:, :, 0], orig_rgb[:, :, 1], orig_rgb[:, :, 2]
-
-        mask_r = (cmax == r) & (delta > 0)
-        mask_g = (cmax == g) & (delta > 0) & ~mask_r
-        mask_b = (delta > 0) & ~mask_r & ~mask_g
-
-        hue[mask_r] = 60.0 * (((g[mask_r] - b[mask_r]) / delta[mask_r]) % 6.0)
-        hue[mask_g] = 60.0 * ((b[mask_g] - r[mask_g]) / delta[mask_g] + 2.0)
-        hue[mask_b] = 60.0 * ((r[mask_b] - g[mask_b]) / delta[mask_b] + 4.0)
-
-        # Saturation (0-1 scale)
-        sat = np.where(cmax > 0, delta / cmax, 0.0)
+        hue, sat, _ = _rgb_to_hsv_arrays(orig_arr[:, :, :3])
 
         modified = False
 
@@ -1127,39 +1153,26 @@ def harmonize_transitions(
 
             # Shift grass-like pixels
             if grass_ref_lab is not None and grass_mask.any():
-                px_rgb = reskinned_arr[:, :, :3][grass_mask].astype(np.float64)
-                px_lab = _rgb_to_lab(px_rgb)
-                shift = (grass_ref_lab[np.newaxis, :] - px_lab) * strength
-                shifted_lab = px_lab + shift
-                shifted_rgb = _lab_to_rgb(shifted_lab)
-                reskinned_arr[:, :, :3][grass_mask] = shifted_rgb
-                modified = True
+                modified |= _shift_masked_pixels(
+                    reskinned_arr, grass_mask, grass_ref_lab, strength)
 
             # Shift water-like pixels
             if water_ref_lab is not None and water_mask.any():
-                px_rgb = reskinned_arr[:, :, :3][water_mask].astype(np.float64)
-                px_lab = _rgb_to_lab(px_rgb)
-                shift = (water_ref_lab[np.newaxis, :] - px_lab) * strength
-                shifted_lab = px_lab + shift
-                shifted_rgb = _lab_to_rgb(shifted_lab)
-                reskinned_arr[:, :, :3][water_mask] = shifted_rgb
-                modified = True
+                modified |= _shift_masked_pixels(
+                    reskinned_arr, water_mask, water_ref_lab, strength)
+
+            if modified:
+                harmonized_count += 1
         else:
             # Non-transition water cells: only shift water-hue pixels
             water_mask = visible & (hue >= 180) & (hue <= 260) & (sat > 0.20)
 
             if water_ref_lab is not None and water_mask.any():
-                px_rgb = reskinned_arr[:, :, :3][water_mask].astype(np.float64)
-                px_lab = _rgb_to_lab(px_rgb)
-                shift = (water_ref_lab[np.newaxis, :] - px_lab) * water_strength
-                shifted_lab = px_lab + shift
-                shifted_rgb = _lab_to_rgb(shifted_lab)
-                reskinned_arr[:, :, :3][water_mask] = shifted_rgb
-                modified = True
-                water_harmonized_count += 1
+                modified |= _shift_masked_pixels(
+                    reskinned_arr, water_mask, water_ref_lab, water_strength)
 
-        if modified:
-            harmonized_count += 1
+            if modified:
+                water_harmonized_count += 1
 
         result.append((cell_info, Image.fromarray(reskinned_arr)))
 
