@@ -1204,3 +1204,633 @@ class TestExtendedWaterHarmonization:
         target_in = np.array(target_img)
         np.testing.assert_array_equal(target_out, target_in,
             err_msg="Non-water-hue pixels in water cells should not be modified")
+
+
+# ---------------------------------------------------------------------------
+# _rgb_to_hsv_arrays
+# ---------------------------------------------------------------------------
+
+class TestRgbToHsvArrays:
+    """Tests for the vectorized RGB -> HSV helper."""
+
+    def test_pure_red(self):
+        """Pure red (255, 0, 0) should have hue=0, sat=1, val=1."""
+        rgb = np.array([[[255, 0, 0]]], dtype=np.uint8)
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        np.testing.assert_allclose(hue[0, 0], 0.0, atol=0.5)
+        np.testing.assert_allclose(sat[0, 0], 1.0, atol=1e-6)
+        np.testing.assert_allclose(val[0, 0], 1.0, atol=1e-6)
+
+    def test_pure_green(self):
+        """Pure green (0, 255, 0) should have hue=120, sat=1, val=1."""
+        rgb = np.array([[[0, 255, 0]]], dtype=np.uint8)
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        np.testing.assert_allclose(hue[0, 0], 120.0, atol=0.5)
+        np.testing.assert_allclose(sat[0, 0], 1.0, atol=1e-6)
+        np.testing.assert_allclose(val[0, 0], 1.0, atol=1e-6)
+
+    def test_pure_blue(self):
+        """Pure blue (0, 0, 255) should have hue=240, sat=1, val=1."""
+        rgb = np.array([[[0, 0, 255]]], dtype=np.uint8)
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        np.testing.assert_allclose(hue[0, 0], 240.0, atol=0.5)
+        np.testing.assert_allclose(sat[0, 0], 1.0, atol=1e-6)
+        np.testing.assert_allclose(val[0, 0], 1.0, atol=1e-6)
+
+    def test_black(self):
+        """Black (0, 0, 0) should have hue=0, sat=0, val=0."""
+        rgb = np.array([[[0, 0, 0]]], dtype=np.uint8)
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        assert hue[0, 0] == 0.0
+        assert sat[0, 0] == 0.0
+        assert val[0, 0] == 0.0
+
+    def test_white(self):
+        """White (255, 255, 255) should have hue=0, sat=0, val=1."""
+        rgb = np.array([[[255, 255, 255]]], dtype=np.uint8)
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        assert hue[0, 0] == 0.0
+        assert sat[0, 0] == 0.0
+        np.testing.assert_allclose(val[0, 0], 1.0, atol=1e-6)
+
+    def test_uniform_gray(self):
+        """A uniform gray (128,128,128) should have delta=0, sat=0."""
+        rgb = np.array([[[128, 128, 128]]], dtype=np.uint8)
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        assert hue[0, 0] == 0.0
+        assert sat[0, 0] == 0.0
+        np.testing.assert_allclose(val[0, 0], 128.0 / 255.0, atol=1e-6)
+
+    def test_batch_shape(self):
+        """A 2x3 pixel grid should return (2, 3) arrays for hue, sat, val."""
+        rgb = np.zeros((2, 3, 3), dtype=np.uint8)
+        rgb[0, 0] = [255, 0, 0]    # red
+        rgb[0, 1] = [0, 255, 0]    # green
+        rgb[0, 2] = [0, 0, 255]    # blue
+        rgb[1, 0] = [0, 0, 0]      # black
+        rgb[1, 1] = [255, 255, 255] # white
+        rgb[1, 2] = [128, 128, 128] # gray
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        assert hue.shape == (2, 3)
+        assert sat.shape == (2, 3)
+        assert val.shape == (2, 3)
+        # Verify hues for the primary colors
+        np.testing.assert_allclose(hue[0, 0], 0.0, atol=0.5)    # red
+        np.testing.assert_allclose(hue[0, 1], 120.0, atol=0.5)  # green
+        np.testing.assert_allclose(hue[0, 2], 240.0, atol=0.5)  # blue
+
+    def test_yellow_hue(self):
+        """Yellow (255, 255, 0) should have hue=60."""
+        rgb = np.array([[[255, 255, 0]]], dtype=np.uint8)
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        np.testing.assert_allclose(hue[0, 0], 60.0, atol=0.5)
+        np.testing.assert_allclose(sat[0, 0], 1.0, atol=1e-6)
+        np.testing.assert_allclose(val[0, 0], 1.0, atol=1e-6)
+
+    def test_cyan_hue(self):
+        """Cyan (0, 255, 255) should have hue=180."""
+        rgb = np.array([[[0, 255, 255]]], dtype=np.uint8)
+        hue, sat, val = reskin_tiles._rgb_to_hsv_arrays(rgb)
+        np.testing.assert_allclose(hue[0, 0], 180.0, atol=0.5)
+
+
+# ---------------------------------------------------------------------------
+# _shift_masked_pixels
+# ---------------------------------------------------------------------------
+
+class TestShiftMaskedPixels:
+    """Tests for the LAB-space pixel shift helper."""
+
+    def test_empty_mask_returns_false(self):
+        """An all-False mask should return False and leave arr unchanged."""
+        arr = np.full((4, 4, 4), 128, dtype=np.uint8)
+        arr[:, :, 3] = 255
+        original = arr.copy()
+        mask = np.zeros((4, 4), dtype=bool)
+        ref_lab = np.array([50.0, 0.0, 0.0])
+        result = reskin_tiles._shift_masked_pixels(arr, mask, ref_lab, strength=1.0)
+        assert result is False
+        np.testing.assert_array_equal(arr, original)
+
+    def test_full_mask_returns_true(self):
+        """An all-True mask should return True and modify all RGB pixels."""
+        arr = np.full((4, 4, 4), 100, dtype=np.uint8)
+        arr[:, :, 3] = 255
+        original_rgb = arr[:, :, :3].copy()
+        mask = np.ones((4, 4), dtype=bool)
+        # A very different target LAB color (bright red in LAB space)
+        ref_lab = np.array([53.0, 80.0, 67.0])
+        result = reskin_tiles._shift_masked_pixels(arr, mask, ref_lab, strength=1.0)
+        assert result is True
+        assert not np.array_equal(arr[:, :, :3], original_rgb), \
+            "Full-mask shift with strength=1.0 should change all RGB pixels"
+
+    def test_alpha_channel_unchanged(self):
+        """The alpha channel should never be modified by _shift_masked_pixels."""
+        arr = np.full((4, 4, 4), 100, dtype=np.uint8)
+        arr[:, :, 3] = 200  # distinctive alpha value
+        alpha_before = arr[:, :, 3].copy()
+        mask = np.ones((4, 4), dtype=bool)
+        ref_lab = np.array([53.0, 80.0, 67.0])
+        reskin_tiles._shift_masked_pixels(arr, mask, ref_lab, strength=1.0)
+        np.testing.assert_array_equal(arr[:, :, 3], alpha_before)
+
+    def test_strength_zero_no_change(self):
+        """With strength=0.0, pixels should not change (shift is multiplied by 0)."""
+        arr = np.full((4, 4, 4), 100, dtype=np.uint8)
+        arr[:, :, 3] = 255
+        original = arr.copy()
+        mask = np.ones((4, 4), dtype=bool)
+        ref_lab = np.array([53.0, 80.0, 67.0])
+        result = reskin_tiles._shift_masked_pixels(arr, mask, ref_lab, strength=0.0)
+        # It returns True (mask had pixels), but no actual change due to zero strength
+        assert result is True
+        np.testing.assert_array_equal(arr[:, :, :3], original[:, :, :3])
+
+    def test_shift_direction_toward_reference(self):
+        """Shifted pixels should be closer to the reference than the original,
+        not further away."""
+        # Start with green-ish pixels
+        arr = np.full((2, 2, 4), 0, dtype=np.uint8)
+        arr[:, :, :3] = [80, 160, 60]  # green
+        arr[:, :, 3] = 255
+        mask = np.ones((2, 2), dtype=bool)
+
+        # Target: bright red in LAB
+        ref_lab = np.array([53.0, 80.0, 67.0])
+
+        # Get original LAB distance
+        original_rgb = arr[:, :, :3][mask].astype(np.float64)
+        original_lab = reskin_tiles._rgb_to_lab(original_rgb)
+        dist_before = np.linalg.norm(original_lab - ref_lab[np.newaxis, :], axis=1).mean()
+
+        reskin_tiles._shift_masked_pixels(arr, mask, ref_lab, strength=0.5)
+
+        # Get shifted LAB distance
+        shifted_rgb = arr[:, :, :3][mask].astype(np.float64)
+        shifted_lab = reskin_tiles._rgb_to_lab(shifted_rgb)
+        dist_after = np.linalg.norm(shifted_lab - ref_lab[np.newaxis, :], axis=1).mean()
+
+        assert dist_after < dist_before, \
+            f"Shift should move pixels toward reference: before={dist_before:.2f}, after={dist_after:.2f}"
+
+    def test_partial_mask(self):
+        """Only masked pixels should be shifted; unmasked stay the same."""
+        arr = np.full((4, 4, 4), 100, dtype=np.uint8)
+        arr[:, :, 3] = 255
+        original = arr.copy()
+        mask = np.zeros((4, 4), dtype=bool)
+        mask[0, 0] = True
+        mask[2, 3] = True
+        ref_lab = np.array([53.0, 80.0, 67.0])
+        reskin_tiles._shift_masked_pixels(arr, mask, ref_lab, strength=1.0)
+        # Unmasked pixels should be unchanged
+        unmasked = ~mask
+        np.testing.assert_array_equal(
+            arr[:, :, :3][unmasked], original[:, :, :3][unmasked])
+
+
+# ---------------------------------------------------------------------------
+# _extract_plain_tile_from_anchor
+# ---------------------------------------------------------------------------
+
+class TestExtractPlainTileFromAnchor:
+    """Tests for the anchor image tile extraction helper."""
+
+    def _make_anchor_image(self, path, tile_color):
+        """Create a synthetic single-cell anchor grid at 4x scale.
+
+        Fills the tile region with tile_color, grid lines with black,
+        and padding with gray.
+        """
+        ts = reskin_tiles.TILE_SIZE  # 24
+        pad = reskin_tiles.CELL_PADDING  # 4
+        glw = reskin_tiles.GRID_LINE_WIDTH  # 2
+        native_w = ts + pad * 2 + glw * 2  # 36
+        native_h = native_w
+
+        native_img = Image.new("RGBA", (native_w, native_h), (0, 0, 0, 255))
+        # Fill padding area with gray
+        for y in range(glw, glw + pad * 2 + ts):
+            for x in range(glw, glw + pad * 2 + ts):
+                native_img.putpixel((x, y), (200, 200, 200, 255))
+        # Fill tile region with tile_color
+        for y in range(glw + pad, glw + pad + ts):
+            for x in range(glw + pad, glw + pad + ts):
+                native_img.putpixel((x, y), tile_color)
+
+        scaled = native_img.resize((native_w * 4, native_h * 4), Image.NEAREST)
+        scaled.save(path)
+
+    def test_returns_correct_shape(self, tmp_path):
+        """Extracted tile should be (TILE_SIZE, TILE_SIZE, 4)."""
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, (100, 200, 50, 255))
+        result = reskin_tiles._extract_plain_tile_from_anchor(str(anchor_path))
+        arr = np.array(result)
+        ts = reskin_tiles.TILE_SIZE
+        assert arr.shape == (ts, ts, 4)
+
+    def test_nearest_resampling_preserves_colors(self, tmp_path):
+        """With NEAREST resampling, the exact tile color should be preserved."""
+        tile_color = (137, 42, 213, 255)
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, tile_color)
+        result = reskin_tiles._extract_plain_tile_from_anchor(str(anchor_path))
+        arr = np.array(result)
+        # Every pixel in the tile should match exactly
+        for c in range(4):
+            assert np.all(arr[:, :, c] == tile_color[c]), \
+                f"Channel {c}: expected {tile_color[c]} everywhere, got unique values {np.unique(arr[:, :, c])}"
+
+    def test_grid_lines_not_in_tile(self, tmp_path):
+        """Grid line pixels (black) should not appear in the extracted tile region."""
+        tile_color = (200, 150, 100, 255)
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, tile_color)
+        result = reskin_tiles._extract_plain_tile_from_anchor(str(anchor_path))
+        arr = np.array(result)
+        # No pixel should be black (the grid line color)
+        black_mask = (arr[:, :, 0] == 0) & (arr[:, :, 1] == 0) & (arr[:, :, 2] == 0)
+        assert not black_mask.any(), "Grid line pixels (black) leaked into tile region"
+
+    def test_padding_not_in_tile(self, tmp_path):
+        """Cell padding (gray) should not appear in the extracted tile region."""
+        tile_color = (50, 100, 200, 255)
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, tile_color)
+        result = reskin_tiles._extract_plain_tile_from_anchor(str(anchor_path))
+        arr = np.array(result)
+        # No pixel should be gray (200,200,200) — the padding color
+        gray_mask = (arr[:, :, 0] == 200) & (arr[:, :, 1] == 200) & (arr[:, :, 2] == 200)
+        assert not gray_mask.any(), "Padding pixels (gray) leaked into tile region"
+
+
+# ---------------------------------------------------------------------------
+# composite_feature_backgrounds — edge cases
+# ---------------------------------------------------------------------------
+
+class TestCompositeFeatureBackgroundsEdgeCases:
+    """Edge-case tests for the background compositing function."""
+
+    def _make_anchor_image(self, path, color):
+        """Create a synthetic anchor image at 4x scale (same as TestCompositeFeatureBackgrounds)."""
+        ts = reskin_tiles.TILE_SIZE
+        pad = reskin_tiles.CELL_PADDING
+        glw = reskin_tiles.GRID_LINE_WIDTH
+        native_w = ts + pad * 2 + glw * 2
+        native_h = native_w
+
+        native_img = Image.new("RGBA", (native_w, native_h), (0, 0, 0, 255))
+        for y in range(glw + pad, glw + pad + ts):
+            for x in range(glw + pad, glw + pad + ts):
+                native_img.putpixel((x, y), color)
+
+        scaled = native_img.resize((native_w * 4, native_h * 4), Image.NEAREST)
+        scaled.save(path)
+
+    def test_all_grass_pixels_fully_replaced(self, tmp_path):
+        """A cell where ALL original pixels are grass-like should have every
+        pixel replaced with the reskinned plain tile."""
+        ts = reskin_tiles.TILE_SIZE
+
+        reskinned_color = (90, 220, 70, 255)
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, reskinned_color)
+
+        # Original atlas: forest cell at (col=0, row=20) is ALL grass-colored
+        atlas_arr = np.zeros((30 * ts, 12 * ts, 4), dtype=np.uint8)
+        y0, x0 = 20 * ts, 0
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [60, 180, 40, 255]  # hue ~110, sat high
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Forest cell — distinct green to verify replacement
+        forest_color = (110, 140, 90, 255)
+        cell_img = Image.new("RGBA", (ts, ts), forest_color)
+        cell_path = tmp_path / "r020_c00.png"
+        cell_img.save(cell_path)
+
+        cell_info = {
+            "id": "r020_c00", "row": 20, "col": 0,
+            "x": 0, "y": 20 * ts,
+            "path": str(cell_path),
+            "type": "forest",
+            "is_anim_frame": False,
+        }
+
+        result = reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+
+        assert result == 1
+        out_arr = np.array(Image.open(cell_path))
+        # Every pixel should now match the reskinned plain color
+        for c in range(3):
+            assert np.all(out_arr[:, :, c] == reskinned_color[c]), \
+                f"Channel {c}: all grass pixels should be replaced with reskinned plain"
+
+    def test_no_grass_pixels_cell_unchanged(self, tmp_path):
+        """A cell with NO grass-like pixels (all blue/water) should be unchanged."""
+        ts = reskin_tiles.TILE_SIZE
+
+        reskinned_color = (90, 220, 70, 255)
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, reskinned_color)
+
+        # Original atlas: forest cell at (col=0, row=20) has ALL blue pixels
+        atlas_arr = np.zeros((30 * ts, 12 * ts, 4), dtype=np.uint8)
+        y0, x0 = 20 * ts, 0
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [30, 60, 220, 255]  # hue ~228, water-like
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Forest cell with blue pixels
+        blue_color = (40, 70, 210, 255)
+        cell_img = Image.new("RGBA", (ts, ts), blue_color)
+        cell_path = tmp_path / "r020_c00.png"
+        cell_img.save(cell_path)
+
+        cell_info = {
+            "id": "r020_c00", "row": 20, "col": 0,
+            "x": 0, "y": 20 * ts,
+            "path": str(cell_path),
+            "type": "forest",
+            "is_anim_frame": False,
+        }
+
+        result = reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+
+        assert result == 0  # no grass pixels found -> nothing composited
+        out_arr = np.array(Image.open(cell_path))
+        expected = np.array(cell_img)
+        np.testing.assert_array_equal(out_arr, expected)
+
+    def test_idempotent_when_already_matching(self, tmp_path):
+        """If the cell already has the reskinned plain color, compositing should
+        still be idempotent — running it again produces the same output."""
+        ts = reskin_tiles.TILE_SIZE
+
+        reskinned_color = (80, 200, 60, 255)
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, reskinned_color)
+
+        # Atlas: forest cell at (col=0, row=20) is grass-colored
+        atlas_arr = np.zeros((30 * ts, 12 * ts, 4), dtype=np.uint8)
+        y0, x0 = 20 * ts, 0
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [60, 180, 40, 255]  # grass
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Cell already has the reskinned plain color
+        cell_img = Image.new("RGBA", (ts, ts), reskinned_color)
+        cell_path = tmp_path / "r020_c00.png"
+        cell_img.save(cell_path)
+
+        cell_info = {
+            "id": "r020_c00", "row": 20, "col": 0,
+            "x": 0, "y": 20 * ts,
+            "path": str(cell_path),
+            "type": "forest",
+            "is_anim_frame": False,
+        }
+
+        # First pass
+        reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+        after_first = np.array(Image.open(cell_path)).copy()
+
+        # Second pass — should produce identical result
+        reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+        after_second = np.array(Image.open(cell_path))
+
+        np.testing.assert_array_equal(after_first, after_second,
+            err_msg="Compositing should be idempotent")
+
+    def test_no_plain_anchor_returns_zero(self, tmp_path):
+        """If no plain anchor is provided, compositing should bail out and return 0."""
+        ts = reskin_tiles.TILE_SIZE
+
+        atlas_arr = np.zeros((30 * ts, 12 * ts, 4), dtype=np.uint8)
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        cell_info = {
+            "id": "r020_c00", "row": 20, "col": 0,
+            "x": 0, "y": 20 * ts,
+            "path": str(tmp_path / "r020_c00.png"),
+            "type": "forest",
+            "is_anim_frame": False,
+        }
+
+        # No plain anchor in dict
+        result = reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"water": "/fake/anchor_water.png"}, atlas_path,
+        )
+        assert result == 0
+
+    def test_anim_frame_cells_skipped(self, tmp_path):
+        """Animation frame cells should be skipped by compositing."""
+        ts = reskin_tiles.TILE_SIZE
+
+        reskinned_color = (90, 220, 70, 255)
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, reskinned_color)
+
+        atlas_arr = np.zeros((30 * ts, 12 * ts, 4), dtype=np.uint8)
+        y0, x0 = 20 * ts, 0
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [60, 180, 40, 255]
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        forest_color = (110, 140, 90, 255)
+        cell_img = Image.new("RGBA", (ts, ts), forest_color)
+        cell_path = tmp_path / "r020_c00.png"
+        cell_img.save(cell_path)
+
+        cell_info = {
+            "id": "r020_c00", "row": 20, "col": 0,
+            "x": 0, "y": 20 * ts,
+            "path": str(cell_path),
+            "type": "forest",
+            "is_anim_frame": True,  # animation frame -> should be skipped
+        }
+
+        result = reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+
+        assert result == 0
+        out_arr = np.array(Image.open(cell_path))
+        expected = np.array(cell_img)
+        np.testing.assert_array_equal(out_arr, expected)
+
+
+# ---------------------------------------------------------------------------
+# harmonize_transitions — extended edge cases
+# ---------------------------------------------------------------------------
+
+class TestHarmonizeTransitionsExtended:
+    """Additional edge-case tests for harmonize_transitions with the
+    extended water harmonization and refactored _shift_masked_pixels."""
+
+    def _make_cell_info(self, col, row, cell_type="plain"):
+        return {
+            "col": col,
+            "row": row,
+            "x": col * reskin_tiles.TILE_SIZE,
+            "y": row * reskin_tiles.TILE_SIZE,
+            "type": cell_type,
+        }
+
+    def test_transition_cells_use_strength_not_water_strength(self, tmp_path):
+        """Transition cells should use the `strength` parameter for both
+        grass and water pixel shifts, not `water_strength`."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Atlas with green (grass) pixels at a transition beach cell
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        y0, x0 = 55 * ts, 3 * ts
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [60, 180, 40, 255]  # grass hue
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        plain_img = Image.new("RGBA", (ts, ts), (50, 200, 30, 255))
+        beach_img = Image.new("RGBA", (ts, ts), (100, 140, 80, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(3, 55, "water"), beach_img),
+        ]
+
+        # Run with high strength, low water_strength
+        result_high_str = reskin_tiles.harmonize_transitions(
+            cells, atlas_path, strength=0.9, water_strength=0.1,
+        )
+        # Run with low strength, high water_strength
+        result_low_str = reskin_tiles.harmonize_transitions(
+            cells, atlas_path, strength=0.1, water_strength=0.9,
+        )
+
+        out_high = np.array(result_high_str[1][1])[:, :, :3].astype(np.float64)
+        out_low = np.array(result_low_str[1][1])[:, :, :3].astype(np.float64)
+        original = np.array(beach_img)[:, :, :3].astype(np.float64)
+
+        # The transition cell should respond to `strength`, not `water_strength`
+        diff_high = np.abs(out_high - original).mean()
+        diff_low = np.abs(out_low - original).mean()
+        assert diff_high > diff_low, (
+            f"Transition cells should use 'strength' param: "
+            f"high_strength_diff={diff_high:.2f} should be > low_strength_diff={diff_low:.2f}"
+        )
+
+    def test_water_strength_zero_leaves_non_transition_water_unchanged(self, tmp_path):
+        """With water_strength=0.0, non-transition water cells should be unchanged."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Atlas with water pixels at a non-transition sea cell (col=5, row=40)
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        y0, x0 = 40 * ts, 5 * ts
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [20, 60, 210, 255]  # water hue
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        plain_img = Image.new("RGBA", (ts, ts), (80, 200, 50, 255))
+        ref_img = Image.new("RGBA", (ts, ts), (30, 90, 180, 255))
+        target_img = Image.new("RGBA", (ts, ts), (60, 120, 240, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(5, 36, "water"), ref_img),
+            (self._make_cell_info(5, 40, "water"), target_img),
+        ]
+
+        result = reskin_tiles.harmonize_transitions(
+            cells, atlas_path, water_strength=0.0,
+        )
+
+        target_out = np.array(result[2][1])
+        target_in = np.array(target_img)
+        np.testing.assert_array_equal(target_out[:, :, :3], target_in[:, :, :3],
+            err_msg="water_strength=0.0 should leave non-transition water cells unchanged")
+
+    def test_edge_column_water_is_transition(self, tmp_path):
+        """Water cells in edge columns (0 or 11) should be treated as
+        transition cells and use `strength`, not `water_strength`."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Atlas: water pixels at col=0, row=40 (edge column)
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        y0, x0 = 40 * ts, 0
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [20, 60, 210, 255]  # water hue
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        plain_img = Image.new("RGBA", (ts, ts), (80, 200, 50, 255))
+        ref_img = Image.new("RGBA", (ts, ts), (30, 90, 180, 255))
+        edge_water_img = Image.new("RGBA", (ts, ts), (60, 120, 240, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(5, 36, "water"), ref_img),
+            (self._make_cell_info(0, 40, "water"), edge_water_img),  # edge col=0
+        ]
+
+        # With strength=0.8, water_strength=0.0
+        # If it's treated as transition, it uses strength -> pixels change
+        # If it's treated as non-transition water, it uses water_strength -> no change
+        result = reskin_tiles.harmonize_transitions(
+            cells, atlas_path, strength=0.8, water_strength=0.0,
+        )
+
+        edge_out = np.array(result[2][1])[:, :, :3]
+        edge_in = np.array(edge_water_img)[:, :, :3]
+        assert not np.array_equal(edge_out, edge_in), \
+            "Edge-column water cell should be treated as transition (uses strength, not water_strength)"
+
+    def test_mountain_type_not_harmonized_as_water(self, tmp_path):
+        """Non-water, non-transition mountain cells should pass through unchanged."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        plain_img = Image.new("RGBA", (ts, ts), (80, 200, 50, 255))
+        # Mountain cell at interior column (col=5, row=10) — not a transition
+        mountain_color = (150, 130, 110, 255)
+        mountain_img = Image.new("RGBA", (ts, ts), mountain_color)
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(5, 10, "mountain"), mountain_img),
+        ]
+
+        result = reskin_tiles.harmonize_transitions(cells, atlas_path)
+
+        mountain_out = np.array(result[1][1])
+        mountain_in = np.array(mountain_img)
+        np.testing.assert_array_equal(mountain_out, mountain_in,
+            err_msg="Interior mountain cells should pass through unchanged")
