@@ -3,6 +3,7 @@ import { Biome } from '@deities/athena/map/Biome.tsx';
 import { injectGlobal } from '@emotion/css';
 import paletteSwap, { HEX } from '@nkzw/palette-swap';
 import Variants from 'athena-crisis:asset-variants';
+import { applyTileOverrides } from 'athena-crisis:images';
 import { AssetDomain, AssetVersion } from './AssetInfo.tsx';
 import BiomeVariants from './BiomeVariants.tsx';
 import VariantConfiguration, { SpriteVariantConfiguration } from './VariantConfiguration.tsx';
@@ -96,6 +97,7 @@ async function loadReskinSources(): Promise<void> {
     const data = (await response.json()) as {
       basePath?: string;
       sprites?: string[];
+      tiles?: Record<string, string>;
     };
     const basePath = data.basePath || 'reskin';
     for (const name of data.sprites || []) {
@@ -103,6 +105,13 @@ async function loadReskinSources(): Promise<void> {
     }
     if (reskinSources.size > 0) {
       console.log(`[Reskin] Loaded ${reskinSources.size} sprite overrides from ${basePath}`);
+    }
+    if (data.tiles) {
+      const tileOverrides = new Map<string, string>();
+      for (const [name, path] of Object.entries(data.tiles)) {
+        tileOverrides.set(name, path);
+      }
+      applyTileOverrides(tileOverrides);
     }
   } catch {
     // No reskin manifest — continue with default sprites

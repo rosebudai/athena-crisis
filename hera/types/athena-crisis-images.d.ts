@@ -31,6 +31,7 @@ declare module 'athena-crisis:images' {
     Upgrade: string;
   };
   export const ShadowImages: ReadonlyMap<string, string>;
+  export function applyTileOverrides(overrides: ReadonlyMap<string, string>): void;
 
   const Images: ReadonlyArray<string>;
   export default Images;

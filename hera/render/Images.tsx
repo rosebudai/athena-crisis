@@ -467,6 +467,32 @@ export const ShadowImages = new Map([
   ['Units-Zombie', UnitsZombieSprite],
 ]);
 
+const tileImages: Record<string, HTMLImageElement> = {
+  Tiles0,
+  Tiles1,
+  Tiles2,
+  Tiles3,
+  Tiles4,
+  Tiles5,
+  Tiles6,
+};
+
+export function applyTileOverrides(
+  overrides: ReadonlyMap<string, string>,
+): void {
+  for (const [name, url] of overrides) {
+    const image = tileImages[name];
+    if (image) {
+      image.src = url;
+    }
+  }
+  if (overrides.size > 0) {
+    console.log(
+      `[Reskin] Applied ${overrides.size} tile override(s)`,
+    );
+  }
+}
+
 export default [
   AttackAcidSprite,
   AttackAcidCloudSprite,
