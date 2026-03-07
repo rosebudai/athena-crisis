@@ -860,3 +860,348 @@ class TestFullBatching:
         # Check that water batches contain some Beach-range rows instead.
         beach_range = set(range(49, 56))  # Beach base block rows 49-54
         assert water_rows & beach_range  # at least some Beach rows present
+
+
+# ---------------------------------------------------------------------------
+# composite_feature_backgrounds
+# ---------------------------------------------------------------------------
+
+class TestCompositeFeatureBackgrounds:
+    """Tests for the pre-process background compositing (halo fix)."""
+
+    def _make_anchor_image(self, path: Path, color: tuple):
+        """Create a synthetic anchor image at 4x scale with the given tile color.
+
+        The anchor is a single-cell grid at 4x scale.  Native layout:
+        GRID_LINE_WIDTH border + CELL_PADDING + TILE_SIZE + CELL_PADDING +
+        GRID_LINE_WIDTH.  We fill the tile region with *color* and the rest
+        with black (grid lines) / gray (padding).
+        """
+        ts = reskin_tiles.TILE_SIZE  # 24
+        pad = reskin_tiles.CELL_PADDING  # 4
+        glw = reskin_tiles.GRID_LINE_WIDTH  # 2
+        native_w = ts + pad * 2 + glw * 2  # 36
+        native_h = native_w
+
+        native_img = Image.new("RGBA", (native_w, native_h), (0, 0, 0, 255))
+        # Fill tile region with the desired color
+        for y in range(glw + pad, glw + pad + ts):
+            for x in range(glw + pad, glw + pad + ts):
+                native_img.putpixel((x, y), color)
+
+        # Save at 4x scale
+        scaled = native_img.resize((native_w * 4, native_h * 4), Image.NEAREST)
+        scaled.save(path)
+
+    def test_plain_cells_unchanged(self, tmp_path):
+        """Plain type cells should not be modified by compositing."""
+        ts = reskin_tiles.TILE_SIZE
+        # Create anchor
+        anchor_path = tmp_path / "anchor_plain.png"
+        reskinned_color = (80, 200, 60, 255)
+        self._make_anchor_image(anchor_path, reskinned_color)
+
+        # Create a minimal atlas with green pixels at (0, 0)
+        atlas_arr = np.zeros((3 * ts, 12 * ts, 4), dtype=np.uint8)
+        atlas_arr[0:ts, 0:ts] = [80, 180, 50, 255]  # grass-like at plain cell
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Create a plain cell PNG
+        plain_color = (100, 160, 70, 255)
+        cell_img = Image.new("RGBA", (ts, ts), plain_color)
+        cell_path = tmp_path / "r000_c00.png"
+        cell_img.save(cell_path)
+
+        cell_info = {
+            "id": "r000_c00", "row": 0, "col": 0,
+            "x": 0, "y": 0,
+            "path": str(cell_path),
+            "type": "plain",
+            "is_anim_frame": False,
+        }
+
+        result = reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+
+        assert result == 0  # nothing composited
+        # Verify cell image unchanged
+        out_arr = np.array(Image.open(cell_path))
+        expected = np.array(cell_img)
+        np.testing.assert_array_equal(out_arr, expected)
+
+    def test_forest_cell_background_replaced(self, tmp_path):
+        """A forest cell with grass-colored background pixels should have
+        those pixels replaced with the reskinned plain tile's pixels."""
+        ts = reskin_tiles.TILE_SIZE
+
+        # Reskinned plain anchor — bright cozy green
+        anchor_path = tmp_path / "anchor_plain.png"
+        reskinned_color = (80, 210, 60, 255)
+        self._make_anchor_image(anchor_path, reskinned_color)
+
+        # Original atlas: forest cell at (col=0, row=20) has grass-colored pixels
+        atlas_arr = np.zeros((30 * ts, 12 * ts, 4), dtype=np.uint8)
+        y0, x0 = 20 * ts, 0
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [60, 180, 40, 255]  # grass hue ~110
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Forest cell — current (pre-composite) image with different green
+        forest_color = (100, 150, 80, 255)
+        cell_img = Image.new("RGBA", (ts, ts), forest_color)
+        cell_path = tmp_path / "r020_c00.png"
+        cell_img.save(cell_path)
+
+        cell_info = {
+            "id": "r020_c00", "row": 20, "col": 0,
+            "x": 0, "y": 20 * ts,
+            "path": str(cell_path),
+            "type": "forest",
+            "is_anim_frame": False,
+        }
+
+        result = reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+
+        assert result == 1  # one cell composited
+        # Verify cell image was replaced with reskinned plain tile pixels
+        out_arr = np.array(Image.open(cell_path))
+        original_arr = np.array(cell_img)
+        # The output should differ from the original forest color
+        assert not np.array_equal(out_arr[:, :, :3], original_arr[:, :, :3]), \
+            "Forest cell pixels should have been replaced by compositing"
+        # The replacement color should be close to the reskinned plain color
+        # (not exact due to LANCZOS downscale of the anchor image)
+        center = ts // 2  # check center pixel to avoid edge artifacts
+        np.testing.assert_allclose(
+            out_arr[center, center, :3].astype(float),
+            list(reskinned_color[:3]),
+            atol=35,  # allow for LANCZOS interpolation at edges
+        )
+
+    def test_water_cells_skipped(self, tmp_path):
+        """Water type cells should not be composited (they use harmonization)."""
+        ts = reskin_tiles.TILE_SIZE
+
+        anchor_path = tmp_path / "anchor_plain.png"
+        self._make_anchor_image(anchor_path, (80, 210, 60, 255))
+
+        # Atlas with water-like pixels at (col=0, row=35)
+        atlas_arr = np.zeros((40 * ts, 12 * ts, 4), dtype=np.uint8)
+        y0, x0 = 35 * ts, 0
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [30, 80, 200, 255]  # blue water
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        water_color = (40, 90, 210, 255)
+        cell_img = Image.new("RGBA", (ts, ts), water_color)
+        cell_path = tmp_path / "r035_c00.png"
+        cell_img.save(cell_path)
+
+        cell_info = {
+            "id": "r035_c00", "row": 35, "col": 0,
+            "x": 0, "y": 35 * ts,
+            "path": str(cell_path),
+            "type": "water",
+            "is_anim_frame": False,
+        }
+
+        result = reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+
+        assert result == 0  # water cells skipped
+        # Verify cell unchanged
+        out_arr = np.array(Image.open(cell_path))
+        np.testing.assert_array_equal(out_arr[0, 0], list(water_color))
+
+    def test_transparent_pixels_preserved(self, tmp_path):
+        """Transparent pixels in feature tiles should remain transparent
+        after compositing."""
+        ts = reskin_tiles.TILE_SIZE
+
+        anchor_path = tmp_path / "anchor_plain.png"
+        reskinned_color = (80, 210, 60, 255)
+        self._make_anchor_image(anchor_path, reskinned_color)
+
+        # Atlas: forest cell at (col=0, row=20) — top half grass, bottom half transparent
+        atlas_arr = np.zeros((30 * ts, 12 * ts, 4), dtype=np.uint8)
+        y0, x0 = 20 * ts, 0
+        atlas_arr[y0:y0 + ts // 2, x0:x0 + ts] = [60, 180, 40, 255]  # top: grass
+        # bottom half stays (0,0,0,0) — transparent
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Forest cell: top half has some green, bottom half transparent
+        cell_arr = np.zeros((ts, ts, 4), dtype=np.uint8)
+        cell_arr[:ts // 2, :] = [100, 150, 80, 255]  # top: opaque green
+        cell_arr[ts // 2:, :] = [0, 0, 0, 0]           # bottom: transparent
+        cell_img = Image.fromarray(cell_arr)
+        cell_path = tmp_path / "r020_c00.png"
+        cell_img.save(cell_path)
+
+        cell_info = {
+            "id": "r020_c00", "row": 20, "col": 0,
+            "x": 0, "y": 20 * ts,
+            "path": str(cell_path),
+            "type": "forest",
+            "is_anim_frame": False,
+        }
+
+        reskin_tiles.composite_feature_backgrounds(
+            [cell_info], {"plain": str(anchor_path)}, atlas_path,
+        )
+
+        out_arr = np.array(Image.open(cell_path))
+        # Bottom half should still be transparent
+        assert out_arr[ts // 2:, :, 3].max() == 0, \
+            "Transparent pixels in bottom half should remain transparent"
+        # Top half should have been replaced (grass pixels -> reskinned plain)
+        assert out_arr[0, 0, 3] == 255, \
+            "Top half opaque pixels should remain opaque"
+
+
+# ---------------------------------------------------------------------------
+# Extended water harmonization
+# ---------------------------------------------------------------------------
+
+class TestExtendedWaterHarmonization:
+    """Tests for harmonize_transitions() extended to all water cells."""
+
+    def _make_cell_info(self, col, row, cell_type="plain"):
+        return {
+            "col": col,
+            "row": row,
+            "x": col * reskin_tiles.TILE_SIZE,
+            "y": row * reskin_tiles.TILE_SIZE,
+            "type": cell_type,
+        }
+
+    def test_all_water_cells_harmonized(self, tmp_path):
+        """Non-transition water cells should also have their water pixels
+        shifted toward the water reference LAB color."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Build atlas with blue (water-hue) pixels at a non-transition sea cell
+        # col=5, row=40 — interior sea cell, NOT edge column, NOT beach
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        y0, x0 = 40 * ts, 5 * ts
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [20, 60, 210, 255]  # hue ~228, water-like
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Reference sea cell at row=36 — water reference source
+        ref_color = (30, 90, 180, 255)  # different blue
+        ref_img = Image.new("RGBA", (ts, ts), ref_color)
+
+        # Non-transition sea cell at row=40, col=5 — should now be harmonized
+        target_color = (60, 120, 240, 255)  # lighter blue, differs from reference
+        target_img = Image.new("RGBA", (ts, ts), target_color)
+
+        # Also include a plain cell for grass reference
+        plain_img = Image.new("RGBA", (ts, ts), (80, 200, 50, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(5, 36, "water"), ref_img),      # reference (row < 50)
+            (self._make_cell_info(5, 40, "water"), target_img),   # non-transition sea
+        ]
+
+        result = reskin_tiles.harmonize_transitions(cells, atlas_path)
+
+        # The target cell should have been modified (water pixels shifted)
+        target_out = np.array(result[2][1])
+        target_in = np.array(target_img)
+        assert not np.array_equal(target_out[:, :, :3], target_in[:, :, :3]), \
+            "Non-transition water cell should be modified by extended harmonization"
+
+    def test_water_strength_parameter(self, tmp_path):
+        """Verify the water_strength parameter controls shift amount for
+        non-transition water cells."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Atlas with water-hue pixels at the target cell
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        y0, x0 = 40 * ts, 5 * ts
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [20, 60, 210, 255]
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        ref_img = Image.new("RGBA", (ts, ts), (30, 90, 180, 255))
+        target_img = Image.new("RGBA", (ts, ts), (60, 120, 240, 255))
+        plain_img = Image.new("RGBA", (ts, ts), (80, 200, 50, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(5, 36, "water"), ref_img),
+            (self._make_cell_info(5, 40, "water"), target_img),
+        ]
+
+        # Run with low water_strength
+        result_low = reskin_tiles.harmonize_transitions(
+            cells, atlas_path, water_strength=0.1,
+        )
+        # Run with high water_strength
+        result_high = reskin_tiles.harmonize_transitions(
+            cells, atlas_path, water_strength=0.9,
+        )
+
+        out_low = np.array(result_low[2][1])[:, :, :3].astype(np.float64)
+        out_high = np.array(result_high[2][1])[:, :, :3].astype(np.float64)
+        original = np.array(target_img)[:, :, :3].astype(np.float64)
+
+        # Higher water_strength should move pixels further from original
+        diff_low = np.abs(out_low - original).mean()
+        diff_high = np.abs(out_high - original).mean()
+        assert diff_high > diff_low, \
+            f"Higher water_strength should produce larger shift: low={diff_low:.2f}, high={diff_high:.2f}"
+
+    def test_non_water_pixels_in_water_cells_unchanged(self, tmp_path):
+        """Non-water-hue pixels in non-transition water cells should not
+        be modified."""
+        ts = reskin_tiles.TILE_SIZE
+        atlas_w = 12 * ts
+        atlas_h = 145 * ts
+
+        # Atlas: the target cell has NON-water pixels (red hue ~0)
+        atlas_arr = np.zeros((atlas_h, atlas_w, 4), dtype=np.uint8)
+        y0, x0 = 40 * ts, 5 * ts
+        atlas_arr[y0:y0 + ts, x0:x0 + ts] = [220, 50, 30, 255]  # red, hue ~6
+        atlas = Image.fromarray(atlas_arr)
+        atlas_path = tmp_path / "atlas.png"
+        atlas.save(atlas_path)
+
+        # Reference sea cell
+        ref_img = Image.new("RGBA", (ts, ts), (30, 90, 180, 255))
+
+        # Target cell: red pixels (NOT water hue) — should NOT be shifted
+        red_color = (200, 60, 40, 255)
+        target_img = Image.new("RGBA", (ts, ts), red_color)
+
+        plain_img = Image.new("RGBA", (ts, ts), (80, 200, 50, 255))
+
+        cells = [
+            (self._make_cell_info(0, 0, "plain"), plain_img),
+            (self._make_cell_info(5, 36, "water"), ref_img),
+            (self._make_cell_info(5, 40, "water"), target_img),
+        ]
+
+        result = reskin_tiles.harmonize_transitions(cells, atlas_path)
+
+        target_out = np.array(result[2][1])
+        target_in = np.array(target_img)
+        np.testing.assert_array_equal(target_out, target_in), \
+            "Non-water-hue pixels in water cells should not be modified"

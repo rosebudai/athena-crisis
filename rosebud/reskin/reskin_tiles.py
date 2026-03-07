@@ -985,6 +985,7 @@ def harmonize_transitions(
     reskinned_cells: list[tuple[dict, Image.Image]],
     original_atlas_path: Path,
     strength: float = 0.6,
+    water_strength: float = 0.4,
 ) -> list[tuple[dict, Image.Image]]:
     """Shift transition-tile pixel colors toward reference terrain colors.
 
@@ -996,11 +997,18 @@ def harmonize_transitions(
     *original* atlas and shifts the corresponding reskinned pixels toward
     the mean color of real plain / water cells.
 
+    Non-transition water cells (deep sea, shallow sea) also have their
+    water-hue pixels shifted toward the water reference, but at a lower
+    strength (``water_strength``) since they need less correction.
+
     Parameters
     ----------
     reskinned_cells : list of (cell_info, Image) tuples
     original_atlas_path : path to the original (un-reskinned) atlas PNG
-    strength : blending strength in [0, 1]; 0 = no change, 1 = full shift
+    strength : blending strength in [0, 1] for transition cells;
+        0 = no change, 1 = full shift
+    water_strength : blending strength in [0, 1] for non-transition water
+        cells; only water-hue pixels are shifted.  Default 0.4.
 
     Returns
     -------
@@ -1051,6 +1059,7 @@ def harmonize_transitions(
     # ------------------------------------------------------------------
     result: list[tuple[dict, Image.Image]] = []
     harmonized_count = 0
+    water_harmonized_count = 0
 
     for cell_info, img in reskinned_cells:
         ctype = cell_info.get("type", "")
@@ -1068,7 +1077,9 @@ def harmonize_transitions(
             if col == 0 or col == ATLAS_COLS - 1:
                 is_transition = True
 
-        if not is_transition:
+        # Non-transition, non-water cells are passed through unchanged
+        is_water_cell = ctype == "water"
+        if not is_transition and not is_water_cell:
             result.append((cell_info, img))
             continue
 
@@ -1107,31 +1118,45 @@ def harmonize_transitions(
         # Saturation (0-1 scale)
         sat = np.where(cmax > 0, delta / cmax, 0.0)
 
-        # Classify: grass-like and water-like masks (only for visible pixels)
-        grass_mask = visible & (hue >= 60) & (hue <= 160) & (sat > 0.20)
-        water_mask = visible & (hue >= 180) & (hue <= 260) & (sat > 0.20)
-
         modified = False
 
-        # Shift grass-like pixels
-        if grass_ref_lab is not None and grass_mask.any():
-            px_rgb = reskinned_arr[:, :, :3][grass_mask].astype(np.float64)
-            px_lab = _rgb_to_lab(px_rgb)
-            shift = (grass_ref_lab[np.newaxis, :] - px_lab) * strength
-            shifted_lab = px_lab + shift
-            shifted_rgb = _lab_to_rgb(shifted_lab)
-            reskinned_arr[:, :, :3][grass_mask] = shifted_rgb
-            modified = True
+        if is_transition:
+            # Transition cells: shift both grass-like and water-like pixels
+            grass_mask = visible & (hue >= 60) & (hue <= 160) & (sat > 0.20)
+            water_mask = visible & (hue >= 180) & (hue <= 260) & (sat > 0.20)
 
-        # Shift water-like pixels
-        if water_ref_lab is not None and water_mask.any():
-            px_rgb = reskinned_arr[:, :, :3][water_mask].astype(np.float64)
-            px_lab = _rgb_to_lab(px_rgb)
-            shift = (water_ref_lab[np.newaxis, :] - px_lab) * strength
-            shifted_lab = px_lab + shift
-            shifted_rgb = _lab_to_rgb(shifted_lab)
-            reskinned_arr[:, :, :3][water_mask] = shifted_rgb
-            modified = True
+            # Shift grass-like pixels
+            if grass_ref_lab is not None and grass_mask.any():
+                px_rgb = reskinned_arr[:, :, :3][grass_mask].astype(np.float64)
+                px_lab = _rgb_to_lab(px_rgb)
+                shift = (grass_ref_lab[np.newaxis, :] - px_lab) * strength
+                shifted_lab = px_lab + shift
+                shifted_rgb = _lab_to_rgb(shifted_lab)
+                reskinned_arr[:, :, :3][grass_mask] = shifted_rgb
+                modified = True
+
+            # Shift water-like pixels
+            if water_ref_lab is not None and water_mask.any():
+                px_rgb = reskinned_arr[:, :, :3][water_mask].astype(np.float64)
+                px_lab = _rgb_to_lab(px_rgb)
+                shift = (water_ref_lab[np.newaxis, :] - px_lab) * strength
+                shifted_lab = px_lab + shift
+                shifted_rgb = _lab_to_rgb(shifted_lab)
+                reskinned_arr[:, :, :3][water_mask] = shifted_rgb
+                modified = True
+        else:
+            # Non-transition water cells: only shift water-hue pixels
+            water_mask = visible & (hue >= 180) & (hue <= 260) & (sat > 0.20)
+
+            if water_ref_lab is not None and water_mask.any():
+                px_rgb = reskinned_arr[:, :, :3][water_mask].astype(np.float64)
+                px_lab = _rgb_to_lab(px_rgb)
+                shift = (water_ref_lab[np.newaxis, :] - px_lab) * water_strength
+                shifted_lab = px_lab + shift
+                shifted_rgb = _lab_to_rgb(shifted_lab)
+                reskinned_arr[:, :, :3][water_mask] = shifted_rgb
+                modified = True
+                water_harmonized_count += 1
 
         if modified:
             harmonized_count += 1
@@ -1139,6 +1164,8 @@ def harmonize_transitions(
         result.append((cell_info, Image.fromarray(reskinned_arr)))
 
     print(f"  Harmonized {harmonized_count} transition cells (strength={strength})")
+    if water_harmonized_count:
+        print(f"  Harmonized {water_harmonized_count} non-transition water cells (water_strength={water_strength})")
     return result
 
 
