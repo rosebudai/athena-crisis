@@ -1,0 +1,17 @@
+{
+  "name": "cozy",
+  "description": "Warm, bright cartoon style with soft colors and friendly characters",
+  "prompt": "cozy cartoon style, warm bright colors, soft shading, friendly cute aesthetic, storybook illustration",
+  "palette": {
+    "reds": "#e85d75",
+    "browns": "#c4956a",
+    "yellows": "#f5d76e",
+    "greens": "#7ec850",
+    "cyans": "#7ecfc0",
+    "blues": "#5b9bd5",
+    "purples": "#b07cc6",
+    "magentas": "#e88abf",
+    "silvers": "#d4d4d4",
+    "grays": "#8b7d6b"
+  }
+}

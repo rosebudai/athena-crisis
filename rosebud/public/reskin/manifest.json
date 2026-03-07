@@ -1,4 +1,7 @@
 {
-  "basePath": "reskin/cyberpunk",
-  "sprites": ["Portraits", "Buildings", "Building-Create", "Units-Infantry", "Units-SmallTank"]
+  "basePath": "reskin/cozy",
+  "sprites": [],
+  "tiles": {
+    "Tiles0": "reskin/cozy/Tiles0.png"
+  }
 }
