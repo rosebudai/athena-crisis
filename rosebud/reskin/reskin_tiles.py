@@ -281,6 +281,55 @@ def _rgb_to_lab(rgb_array: np.ndarray) -> np.ndarray:
     return np.stack([L, a, b], axis=1)
 
 
+def _lab_to_rgb(lab_array: np.ndarray) -> np.ndarray:
+    """Convert CIELAB array to RGB (0-255). Shape: (N, 3) -> (N, 3) uint8.
+
+    Pipeline: CIELAB -> XYZ (D65) -> linear RGB -> sRGB uint8.
+    Inverse of ``_rgb_to_lab()``.
+    """
+    L = lab_array[:, 0]
+    a = lab_array[:, 1]
+    b = lab_array[:, 2]
+
+    # LAB -> f values
+    fy = (L + 16.0) / 116.0
+    fx = a / 500.0 + fy
+    fz = fy - b / 200.0
+
+    # f values -> XYZ (inverse of the forward transform)
+    epsilon = 216.0 / 24389.0
+    kappa = 24389.0 / 27.0
+    x = np.where(fx ** 3 > epsilon, fx ** 3, (116.0 * fx - 16.0) / kappa)
+    y = np.where(L > kappa * epsilon, ((L + 16.0) / 116.0) ** 3, L / kappa)
+    z = np.where(fz ** 3 > epsilon, fz ** 3, (116.0 * fz - 16.0) / kappa)
+
+    # Denormalize by D65 white point
+    d65 = np.array([0.95047, 1.00000, 1.08883])
+    xyz = np.stack([x, y, z], axis=1) * d65  # (N, 3)
+
+    # XYZ -> linear RGB (inverse of the sRGB D65 matrix)
+    m_inv = np.array([
+        [ 3.2404542, -1.5371385, -0.4985314],
+        [-0.9692660,  1.8760108,  0.0415560],
+        [ 0.0556434, -0.2040259,  1.0572252],
+    ])
+    linear_rgb = xyz @ m_inv.T  # (N, 3)
+
+    # Clip to [0, 1] before gamma to avoid NaN from negative values
+    linear_rgb = np.clip(linear_rgb, 0.0, 1.0)
+
+    # Apply sRGB gamma companding
+    srgb = np.where(
+        linear_rgb > 0.0031308,
+        1.055 * np.power(linear_rgb, 1.0 / 2.4) - 0.055,
+        12.92 * linear_rgb,
+    )
+
+    # Clamp and convert to uint8
+    srgb = np.clip(srgb * 255.0, 0.0, 255.0)
+    return np.round(srgb).astype(np.uint8)
+
+
 # Modifier x-offset ranges for each animation (from Tile.tsx modifier definitions).
 # Used by the conservative init to estimate which columns each animation uses.
 _ANIM_COL_OFFSETS: dict[str, tuple[int, int]] = {
@@ -762,6 +811,167 @@ def snap_to_palette(
 
     print(f"  Snapped {len(result)} cells to {len(palette_lab)}-color palette")
 
+    return result
+
+
+def harmonize_transitions(
+    reskinned_cells: list[tuple[dict, Image.Image]],
+    original_atlas_path: Path,
+    strength: float = 0.6,
+) -> list[tuple[dict, Image.Image]]:
+    """Shift transition-tile pixel colors toward reference terrain colors.
+
+    Transition tiles (beach, riverbank, sea edges) contain pixels from two
+    terrain types (e.g. grass + water).  Because they are batched by their
+    primary type, the AI reskins the secondary-type portions with slightly
+    different tones than actual plain/water tiles.  This function detects
+    grass-like and water-like pixels in each transition cell using the
+    *original* atlas and shifts the corresponding reskinned pixels toward
+    the mean color of real plain / water cells.
+
+    Parameters
+    ----------
+    reskinned_cells : list of (cell_info, Image) tuples
+    original_atlas_path : path to the original (un-reskinned) atlas PNG
+    strength : blending strength in [0, 1]; 0 = no change, 1 = full shift
+
+    Returns
+    -------
+    list of (cell_info, Image) tuples with harmonized images.
+    """
+    original_atlas = Image.open(original_atlas_path).convert("RGBA")
+
+    # ------------------------------------------------------------------
+    # 1. Extract reference LAB colors from reskinned cells
+    # ------------------------------------------------------------------
+    grass_pixels: list[np.ndarray] = []
+    water_pixels: list[np.ndarray] = []
+
+    for cell_info, img in reskinned_cells:
+        arr = np.array(img)
+        visible = arr[:, :, 3] > 0
+        if not visible.any():
+            continue
+
+        ctype = cell_info.get("type", "")
+        row = cell_info.get("row", -1)
+
+        if ctype == "plain":
+            grass_pixels.append(arr[:, :, :3][visible])
+        elif ctype == "water" and row < 50:
+            water_pixels.append(arr[:, :, :3][visible])
+
+    # Compute mean LAB for each reference group
+    grass_ref_lab: np.ndarray | None = None
+    water_ref_lab: np.ndarray | None = None
+
+    if grass_pixels:
+        all_grass = np.concatenate(grass_pixels, axis=0).astype(np.float64)
+        grass_lab = _rgb_to_lab(all_grass)
+        grass_ref_lab = grass_lab.mean(axis=0)  # (3,)
+
+    if water_pixels:
+        all_water = np.concatenate(water_pixels, axis=0).astype(np.float64)
+        water_lab = _rgb_to_lab(all_water)
+        water_ref_lab = water_lab.mean(axis=0)  # (3,)
+
+    if grass_ref_lab is None and water_ref_lab is None:
+        print("  WARNING: No reference colors found, skipping harmonize")
+        return list(reskinned_cells)
+
+    # ------------------------------------------------------------------
+    # 2-3. For each transition cell, classify & shift pixels
+    # ------------------------------------------------------------------
+    result: list[tuple[dict, Image.Image]] = []
+    harmonized_count = 0
+
+    for cell_info, img in reskinned_cells:
+        ctype = cell_info.get("type", "")
+        row = cell_info.get("row", -1)
+
+        # Determine if this is a transition cell
+        is_transition = False
+        if ctype == "water" and row >= 50:
+            is_transition = True  # beach
+        elif ctype == "river":
+            is_transition = True  # riverbank
+        elif ctype == "water" and 34 <= row <= 49:
+            # Edge columns of sea tiles
+            col = cell_info.get("col", -1)
+            if col == 0 or col == ATLAS_COLS - 1:
+                is_transition = True
+
+        if not is_transition:
+            result.append((cell_info, img))
+            continue
+
+        reskinned_arr = np.array(img).copy()  # (H, W, 4) uint8
+        visible = reskinned_arr[:, :, 3] > 0
+        if not visible.any():
+            result.append((cell_info, img))
+            continue
+
+        # Extract the matching cell from the original atlas
+        x = cell_info["x"]
+        y = cell_info["y"]
+        orig_cell = original_atlas.crop((x, y, x + TILE_SIZE, y + TILE_SIZE))
+        orig_arr = np.array(orig_cell)
+
+        # Classify original pixels using HSV
+        orig_rgb = orig_arr[:, :, :3].astype(np.float64) / 255.0
+
+        # Manual RGB -> HSV (vectorized)
+        cmax = orig_rgb.max(axis=2)
+        cmin = orig_rgb.min(axis=2)
+        delta = cmax - cmin
+
+        # Hue calculation
+        hue = np.zeros_like(cmax)
+        r, g, b = orig_rgb[:, :, 0], orig_rgb[:, :, 1], orig_rgb[:, :, 2]
+
+        mask_r = (cmax == r) & (delta > 0)
+        mask_g = (cmax == g) & (delta > 0) & ~mask_r
+        mask_b = (delta > 0) & ~mask_r & ~mask_g
+
+        hue[mask_r] = 60.0 * (((g[mask_r] - b[mask_r]) / delta[mask_r]) % 6.0)
+        hue[mask_g] = 60.0 * ((b[mask_g] - r[mask_g]) / delta[mask_g] + 2.0)
+        hue[mask_b] = 60.0 * ((r[mask_b] - g[mask_b]) / delta[mask_b] + 4.0)
+
+        # Saturation (0-1 scale)
+        sat = np.where(cmax > 0, delta / cmax, 0.0)
+
+        # Classify: grass-like and water-like masks (only for visible pixels)
+        grass_mask = visible & (hue >= 60) & (hue <= 160) & (sat > 0.20)
+        water_mask = visible & (hue >= 180) & (hue <= 260) & (sat > 0.20)
+
+        modified = False
+
+        # Shift grass-like pixels
+        if grass_ref_lab is not None and grass_mask.any():
+            px_rgb = reskinned_arr[:, :, :3][grass_mask].astype(np.float64)
+            px_lab = _rgb_to_lab(px_rgb)
+            shift = (grass_ref_lab[np.newaxis, :] - px_lab) * strength
+            shifted_lab = px_lab + shift
+            shifted_rgb = _lab_to_rgb(shifted_lab)
+            reskinned_arr[:, :, :3][grass_mask] = shifted_rgb
+            modified = True
+
+        # Shift water-like pixels
+        if water_ref_lab is not None and water_mask.any():
+            px_rgb = reskinned_arr[:, :, :3][water_mask].astype(np.float64)
+            px_lab = _rgb_to_lab(px_rgb)
+            shift = (water_ref_lab[np.newaxis, :] - px_lab) * strength
+            shifted_lab = px_lab + shift
+            shifted_rgb = _lab_to_rgb(shifted_lab)
+            reskinned_arr[:, :, :3][water_mask] = shifted_rgb
+            modified = True
+
+        if modified:
+            harmonized_count += 1
+
+        result.append((cell_info, Image.fromarray(reskinned_arr)))
+
+    print(f"  Harmonized {harmonized_count} transition cells (strength={strength})")
     return result
 
 
@@ -1289,6 +1499,10 @@ def main():
             "full: all stages sequentially (default)."
         ),
     )
+    parser.add_argument(
+        "--skip-harmonize", action="store_true",
+        help="Skip the transition-tile color harmonization step",
+    )
     args = parser.parse_args()
 
     theme = _load_env_and_theme(args)
@@ -1392,6 +1606,13 @@ def main():
         all_reskinned_cells = snap_to_palette(
             all_reskinned_cells, palette_lab, palette_rgb,
         )
+
+        # Harmonize transition tile colors
+        if not args.skip_harmonize:
+            print(f"\n  Harmonizing transition tile colors...")
+            all_reskinned_cells = harmonize_transitions(
+                all_reskinned_cells, atlas_path,
+            )
 
         # Copy base frame art to all animation frames to prevent flickering
         print(f"\n  Copying base frames to animation frames...")
