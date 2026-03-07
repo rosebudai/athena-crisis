@@ -104,7 +104,11 @@ TILE_TYPE_HINTS = {
     "mountain": (
         "These are MOUNTAIN terrain tiles showing rocky peaks and elevated "
         "terrain. Keep the rock texture, snow caps, and shading style "
-        "CONSISTENT across all tiles. Mountains connect to form ranges."
+        "CONSISTENT across all tiles. Mountains connect to form ranges. "
+        "Mountain tiles form connected ranges — ensure rock textures flow "
+        "seamlessly across tile boundaries with no visible seams or "
+        "flat-colored rectangular blocks. Snow caps and rock faces should "
+        "blend naturally where tiles meet."
     ),
     "forest": (
         "These are FOREST/TREE tiles showing various tree arrangements "
@@ -119,7 +123,10 @@ TILE_TYPE_HINTS = {
     "pier": (
         "These are PIER/DOCK tiles showing wooden structures extending "
         "over water. Keep the wood texture and water style consistent. "
-        "Piers connect to form walkways."
+        "Piers connect to form walkways. "
+        "Border tiles must transition smoothly into adjacent terrain. "
+        "Where borders meet water, match the water style exactly. "
+        "Where borders meet grass, match the grass tone exactly."
     ),
     "water": (
         "These are WATER tiles including open ocean (SEA), deep ocean, "
@@ -169,8 +176,8 @@ BATCH_PROMPT_TEMPLATE = (
 MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE = (
     "Reskin the tiles in the last image to match the visual style of the reference images. "
     "The first reference shows the target style for {type_name} tiles. "
-    "The second reference shows the grass/land colors — any land or grass portions "
-    "in these transition tiles MUST use those exact green tones. "
+    "Additional references show context colors — match water portions to any water "
+    "reference and grass/land portions to any grass reference exactly. "
     "These are {type_name} game tiles, top-down orthogonal perspective, "
     "16-bit modern retro pixel art style, warm and cozy color palette "
     "with soft saturation, flat cartoon shading, clean edges, "
@@ -181,8 +188,8 @@ MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE = (
     "2) Only change colors and textures — don't move or resize tiles. "
     "3) No text, labels, or watermarks. "
     "4) Keep black grid lines and gray padding as-is. "
-    "5) Match the first reference's water/river palette and shading exactly. "
-    "6) Match the second reference's grass/land colors for any land portions."
+    "5) Match the reference images' palettes and shading exactly. "
+    "6) Use the reference grass/land colors for any land portions."
 )
 
 
@@ -1544,11 +1551,22 @@ def _reskin_batches(
                 type_anchor = anchor_paths.get(tile_type)
                 if type_anchor:
                     batch_anchor_paths = [type_anchor]
-                    # For transition types (water, river), include the plain
-                    # anchor as a second reference so Gemini matches the
-                    # grass/land colors in coastline and riverbank tiles.
+                    # For transition types, include additional anchors so
+                    # Gemini can match adjacent-terrain colors exactly.
+                    plain_anchor = anchor_paths.get("plain")
+                    water_anchor = anchor_paths.get("water")
                     if tile_type in ("water", "river"):
-                        plain_anchor = anchor_paths.get("plain")
+                        # Water/river: add plain anchor for grass in coastlines/banks
+                        if plain_anchor and plain_anchor != type_anchor:
+                            batch_anchor_paths.append(plain_anchor)
+                    elif tile_type == "pier":
+                        # Pier: add water anchor + plain anchor (borders touch both)
+                        if water_anchor and water_anchor != type_anchor:
+                            batch_anchor_paths.append(water_anchor)
+                        if plain_anchor and plain_anchor != type_anchor:
+                            batch_anchor_paths.append(plain_anchor)
+                    elif tile_type in ("mountain", "forest", "campsite"):
+                        # Mountain/forest/campsite: add plain anchor for grass background
                         if plain_anchor and plain_anchor != type_anchor:
                             batch_anchor_paths.append(plain_anchor)
             reskinned_img = reskin_batch_gemini(
