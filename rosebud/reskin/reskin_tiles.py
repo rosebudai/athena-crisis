@@ -166,6 +166,25 @@ BATCH_PROMPT_TEMPLATE = (
     "5) Match the first image's palette and shading exactly."
 )
 
+MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE = (
+    "Reskin the tiles in the last image to match the visual style of the reference images. "
+    "The first reference shows the target style for {type_name} tiles. "
+    "The second reference shows the grass/land colors — any land or grass portions "
+    "in these transition tiles MUST use those exact green tones. "
+    "These are {type_name} game tiles, top-down orthogonal perspective, "
+    "16-bit modern retro pixel art style, warm and cozy color palette "
+    "with soft saturation, flat cartoon shading, clean edges, "
+    "storybook illustration aesthetic. "
+    "{type_hint} "
+    "RULES: "
+    "1) Keep the exact same grid layout and tile positions. "
+    "2) Only change colors and textures — don't move or resize tiles. "
+    "3) No text, labels, or watermarks. "
+    "4) Keep black grid lines and gray padding as-is. "
+    "5) Match the first reference's water/river palette and shading exactly. "
+    "6) Match the second reference's grass/land colors for any land portions."
+)
+
 
 def download_atlas(atlas_name: str, work_dir: Path) -> Path:
     """Download the original atlas from CDN."""
@@ -980,14 +999,16 @@ def reskin_batch_gemini(
     theme: dict,
     batch_id: str,
     tile_type: str,
-    anchor_path: str | None = None,
+    anchor_paths: list[str] | None = None,
 ) -> Image.Image | None:
     """Send a batch grid to Gemini Flash for reskinning.
 
-    When *anchor_path* is provided the anchor image is included as the first
-    image input and the batch grid as the second, using the two-image
-    ``BATCH_PROMPT_TEMPLATE``.  When ``None`` the single-image
-    ``ANCHOR_PROMPT_TEMPLATE`` is used as a backward-compat fallback.
+    When *anchor_paths* contains one path, uses the two-image
+    ``BATCH_PROMPT_TEMPLATE`` (anchor + batch).  When it contains multiple
+    paths (e.g. type anchor + plain anchor for transition tiles), uses the
+    ``MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE`` with all anchors then the batch.
+    When ``None`` or empty, falls back to the single-image
+    ``ANCHOR_PROMPT_TEMPLATE``.
     """
     from google import genai
     from google.genai import types
@@ -1001,13 +1022,25 @@ def reskin_batch_gemini(
 
     type_hint = TILE_TYPE_HINTS.get(tile_type, "")
 
-    if anchor_path:
+    if anchor_paths and len(anchor_paths) > 1:
+        # Multi-anchor prompt: type anchor + plain anchor + batch to reskin
+        prompt = MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE.format(
+            type_name=tile_type, type_hint=type_hint,
+        )
+
+        contents: list = [prompt]
+        for ap in anchor_paths:
+            data = open(ap, "rb").read()
+            contents.append(types.Part.from_bytes(data=data, mime_type="image/png"))
+        batch_data = open(batch_path, "rb").read()
+        contents.append(types.Part.from_bytes(data=batch_data, mime_type="image/png"))
+    elif anchor_paths and len(anchor_paths) == 1:
         # Two-image prompt: anchor tile + batch to reskin
         prompt = BATCH_PROMPT_TEMPLATE.format(
             type_name=tile_type, type_hint=type_hint,
         )
 
-        anchor_data = open(anchor_path, "rb").read()
+        anchor_data = open(anchor_paths[0], "rb").read()
         anchor_part = types.Part.from_bytes(data=anchor_data, mime_type="image/png")
         batch_data = open(batch_path, "rb").read()
         batch_part = types.Part.from_bytes(data=batch_data, mime_type="image/png")
@@ -1365,12 +1398,21 @@ def _reskin_batches(
                     f"  {batch_id}: Sending to Gemini Flash "
                     f"({len(batch_meta['cells'])} {tile_type} cells)"
                 )
-            anchor_path = None
+            batch_anchor_paths = None
             if anchor_paths:
-                anchor_path = anchor_paths.get(tile_type)
+                type_anchor = anchor_paths.get(tile_type)
+                if type_anchor:
+                    batch_anchor_paths = [type_anchor]
+                    # For transition types (water, river), include the plain
+                    # anchor as a second reference so Gemini matches the
+                    # grass/land colors in coastline and riverbank tiles.
+                    if tile_type in ("water", "river"):
+                        plain_anchor = anchor_paths.get("plain")
+                        if plain_anchor and plain_anchor != type_anchor:
+                            batch_anchor_paths.append(plain_anchor)
             reskinned_img = reskin_batch_gemini(
                 batch_meta["path"], theme, batch_id, tile_type,
-                anchor_path=anchor_path,
+                anchor_paths=batch_anchor_paths,
             )
             if reskinned_img is None:
                 with print_lock:
