@@ -776,6 +776,147 @@ def extract_palette(
     return palette_lab
 
 
+def _extract_plain_tile_from_anchor(anchor_path: str) -> Image.Image:
+    """Extract the 24x24 plain tile from the reskinned anchor grid image.
+
+    The anchor is a single-cell grid saved at 4x scale.  Layout at native
+    resolution:  GRID_LINE_WIDTH border, then CELL_PADDING, then TILE_SIZE
+    pixels of actual tile content.  We downscale to native, crop the tile
+    region, and return a 24x24 RGBA image.
+    """
+    anchor_img = Image.open(anchor_path).convert("RGBA")
+
+    # Native (1x) dimensions for a single-cell grid
+    cell_w = TILE_SIZE + CELL_PADDING * 2
+    cell_h = TILE_SIZE + CELL_PADDING * 2
+    native_w = 1 * cell_w + 2 * GRID_LINE_WIDTH
+    native_h = 1 * cell_h + 2 * GRID_LINE_WIDTH
+
+    # Downscale from 4x to native
+    native_img = anchor_img.resize((native_w, native_h), Image.LANCZOS)
+
+    # The tile content starts after the grid line and padding
+    tile_x = GRID_LINE_WIDTH + CELL_PADDING
+    tile_y = GRID_LINE_WIDTH + CELL_PADDING
+    tile_crop = native_img.crop((
+        tile_x, tile_y,
+        tile_x + TILE_SIZE, tile_y + TILE_SIZE,
+    ))
+
+    return tile_crop.copy()
+
+
+def composite_feature_backgrounds(
+    cells: list[dict],
+    anchor_paths: dict[str, str],
+    original_atlas_path: Path,
+) -> int:
+    """Replace grass-like background pixels in feature tiles with the reskinned plain tile.
+
+    For each extracted cell that is NOT type ``plain`` and NOT type ``water``,
+    identify background pixels by comparing the original cell to the original
+    plain tile using HSV hue classification (grass-like: hue 60-160 deg,
+    saturation > 0.20).  Replace those pixels in the cell PNG with the
+    corresponding pixels from the reskinned plain tile.
+
+    Operates in-place on cell PNG files in the ``cells/`` directory.
+
+    Parameters
+    ----------
+    cells : list of cell info dicts (from extract_cells / manifest)
+    anchor_paths : dict mapping terrain type -> anchor image path
+    original_atlas_path : path to the original (un-reskinned) atlas PNG
+
+    Returns
+    -------
+    int : number of cells composited
+    """
+    if "plain" not in anchor_paths:
+        print("[composite] WARNING: No plain anchor found, skipping compositing")
+        return 0
+
+    # Extract the 24x24 reskinned plain tile from the anchor grid
+    reskinned_plain = _extract_plain_tile_from_anchor(anchor_paths["plain"])
+    reskinned_plain_arr = np.array(reskinned_plain)  # (24, 24, 4)
+
+    # Load the original atlas to get original plain tile pixels
+    original_atlas = Image.open(original_atlas_path).convert("RGBA")
+
+    # Types to skip — plain (is the source) and water (has its own harmonization)
+    skip_types = {"plain", "water"}
+
+    composited_count = 0
+
+    for cell_info in cells:
+        ctype = cell_info.get("type", "")
+        if ctype in skip_types:
+            continue
+        if cell_info.get("is_anim_frame"):
+            continue
+
+        # Load current cell image
+        cell_path = cell_info["path"]
+        cell_img = Image.open(cell_path).convert("RGBA")
+        cell_arr = np.array(cell_img)  # (H, W, 4)
+
+        # Get the original cell from the atlas for HSV classification
+        x = cell_info["x"]
+        y = cell_info["y"]
+        orig_cell = original_atlas.crop((x, y, x + TILE_SIZE, y + TILE_SIZE))
+        orig_arr = np.array(orig_cell)
+
+        # Only consider visible pixels in the original cell
+        visible = orig_arr[:, :, 3] > 0
+        if not visible.any():
+            continue
+
+        # Classify original pixels using HSV (same pattern as harmonize_transitions)
+        orig_rgb = orig_arr[:, :, :3].astype(np.float64) / 255.0
+
+        cmax = orig_rgb.max(axis=2)
+        cmin = orig_rgb.min(axis=2)
+        delta = cmax - cmin
+
+        # Hue calculation
+        hue = np.zeros_like(cmax)
+        r, g, b = orig_rgb[:, :, 0], orig_rgb[:, :, 1], orig_rgb[:, :, 2]
+
+        mask_r = (cmax == r) & (delta > 0)
+        mask_g = (cmax == g) & (delta > 0) & ~mask_r
+        mask_b = (delta > 0) & ~mask_r & ~mask_g
+
+        hue[mask_r] = 60.0 * (((g[mask_r] - b[mask_r]) / delta[mask_r]) % 6.0)
+        hue[mask_g] = 60.0 * ((b[mask_g] - r[mask_g]) / delta[mask_g] + 2.0)
+        hue[mask_b] = 60.0 * ((r[mask_b] - g[mask_b]) / delta[mask_b] + 4.0)
+
+        # Saturation (0-1 scale)
+        sat = np.where(cmax > 0, delta / cmax, 0.0)
+
+        # Grass-like mask: visible, hue 60-160, sat > 0.20
+        grass_mask = visible & (hue >= 60) & (hue <= 160) & (sat > 0.20)
+
+        if not grass_mask.any():
+            continue
+
+        # Also require the reskinned plain tile pixel to be visible at that position
+        plain_visible = reskinned_plain_arr[:, :, 3] > 0
+        replace_mask = grass_mask & plain_visible
+
+        if not replace_mask.any():
+            continue
+
+        # Replace grass-like pixels with reskinned plain tile pixels
+        cell_arr[replace_mask] = reskinned_plain_arr[replace_mask]
+
+        # Save the composited cell back to the same path
+        composited_img = Image.fromarray(cell_arr)
+        composited_img.save(cell_path)
+        composited_count += 1
+
+    print(f"[composite] Composited {composited_count} feature tile backgrounds")
+    return composited_count
+
+
 def snap_to_palette(
     reskinned_cells: list[tuple[dict, Image.Image]],
     palette_lab: np.ndarray,
@@ -1536,7 +1677,7 @@ def main():
         choices=["1", "2", "full"],
         help=(
             "Pipeline stage to run. "
-            "1: generate anchor tiles and extract palette, exit. "
+            "1: generate anchor tiles, extract palette, composite backgrounds, exit. "
             "2: reskin all batches with anchors, palette snap, reassemble atlas, exit. "
             "full: all stages sequentially (default)."
         ),
@@ -1544,6 +1685,10 @@ def main():
     parser.add_argument(
         "--skip-harmonize", action="store_true",
         help="Skip the transition-tile color harmonization step",
+    )
+    parser.add_argument(
+        "--skip-composite", action="store_true",
+        help="Skip the background compositing step (grass pixel replacement)",
     )
     args = parser.parse_args()
 
@@ -1556,7 +1701,26 @@ def main():
     # Common steps: download atlas and extract cells
     atlas_path, cells = _download_and_extract(args, work_dir)
 
-    # Create type-grouped batches
+    # ---- Stage 1: Generate anchors + extract palette + composite ----
+    if not args.dry_run and args.stage in ("1", "full"):
+        print("\n--- Stage 1: Generating anchor tiles ---")
+        anchor_paths = generate_anchors(cells, theme, work_dir)
+
+        print("\n--- Stage 1: Extracting palette from anchors ---")
+        palette_lab = extract_palette(anchor_paths, work_dir)
+
+        # Composite reskinned plain background onto feature tiles
+        if not args.skip_composite:
+            print("\n--- Stage 1: Compositing feature backgrounds ---")
+            composite_feature_backgrounds(cells, anchor_paths, atlas_path)
+
+        if args.stage == "1":
+            print(f"\nStage 1 complete. Review anchor tiles at {work_dir}/anchor_*.png")
+            print(f"Palette saved to {work_dir}/palette.json")
+            print("If anchors look good, run --stage 2.")
+            return
+
+    # Create type-grouped batches (after compositing so cells have updated backgrounds)
     print("\n3. Creating type-grouped batches...")
     batches = create_typed_batches(cells, work_dir)
     batches_manifest = work_dir / "batches_manifest.json"
@@ -1566,20 +1730,6 @@ def main():
         print(f"\nDry run complete. {len(cells)} cells in {len(batches)} batches.")
         print(f"Batch grids saved to {work_dir / 'batches'}/")
         return
-
-    # ---- Stage 1: Generate anchors + extract palette ----
-    if args.stage in ("1", "full"):
-        print("\n--- Stage 1: Generating anchor tiles ---")
-        anchor_paths = generate_anchors(cells, theme, work_dir)
-
-        print("\n--- Stage 1: Extracting palette from anchors ---")
-        palette_lab = extract_palette(anchor_paths, work_dir)
-
-        if args.stage == "1":
-            print(f"\nStage 1 complete. Review anchor tiles at {work_dir}/anchor_*.png")
-            print(f"Palette saved to {work_dir}/palette.json")
-            print("If anchors look good, run --stage 2.")
-            return
 
     # ---- Stage 2: Full reskin + palette snap + reassemble ----
     if args.stage in ("2", "full"):
