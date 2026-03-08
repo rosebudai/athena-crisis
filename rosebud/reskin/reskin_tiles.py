@@ -88,8 +88,8 @@ TILE_CELL_MAP: dict[tuple[int, int], str] = {
     (0, 3): "street", (1, 3): "street", (2, 3): "street", (3, 3): "street", (4, 3): "street", (5, 3): "rail", (6, 3): "rail", (7, 3): "rail", (8, 3): "bridge", (9, 3): "floatingedge", (10, 3): "lightning", (11, 3): "rail",
     (0, 4): "street", (1, 4): "street", (2, 4): "street", (3, 4): "street", (4, 4): "street", (5, 4): "rail", (6, 4): "rail", (7, 4): "rail", (8, 4): "bridge",
     (0, 5): "street", (1, 5): "street", (2, 5): "street", (3, 5): "street", (4, 5): "street", (5, 5): "bridge", (6, 5): "bridge", (7, 5): "bridge", (8, 5): "bridge",
-    # --- Row 6: Mountain/Street boundary ---
-    (0, 6): "mountain", (3, 6): "street", (4, 6): "street", (5, 6): "stormcloud", (6, 6): "stormcloud", (7, 6): "stormcloud", (10, 6): "lightning",
+    # --- Row 6: Mountain/StormCloud boundary ---
+    (0, 6): "mountain", (3, 6): "mountain", (4, 6): "mountain", (5, 6): "stormcloud", (6, 6): "stormcloud", (7, 6): "stormcloud", (10, 6): "lightning",
     # --- Rows 7-13: Mountain + StormCloud ---
     (0, 7): "mountain", (1, 7): "mountain", (2, 7): "mountain", (3, 7): "mountain", (4, 7): "mountain", (5, 7): "stormcloud", (6, 7): "stormcloud", (7, 7): "stormcloud", (8, 7): "stormcloud", (10, 7): "lightning",
     (0, 8): "mountain", (1, 8): "mountain", (2, 8): "mountain", (3, 8): "mountain", (4, 8): "mountain", (5, 8): "stormcloud", (6, 8): "stormcloud", (7, 8): "stormcloud", (8, 8): "stormcloud", (9, 8): "floatingedge", (10, 8): "lightning", (11, 8): "lightning",
@@ -187,19 +187,157 @@ TILE_CELL_MAP: dict[tuple[int, int], str] = {
     },
 }
 
-# Sub-types that batch with a parent type during AI reskinning.
-# Types not listed here batch under their own name.
-TYPE_BATCH_MAPPING: dict[str, str] = {
-    "reef": "water",
-    "sea_object": "water",
-    "trench": "street",
+# Sub-types that inherit their anchor from a parent type.
+# Types not listed here generate their own anchor.
+ANCHOR_INHERITANCE: dict[str, str] = {
+    "trench": "plain",
     "bridge": "street",
-    "rail": "street",
     "pipe": "street",
-    "lightning": "plain",
     "computer": "street",
+    "lightning": "plain",
     "floatingedge": "water",
+    "sea_object": "water",
+    "reef": "water",
 }
+
+# Per-cell descriptions for tiles in "street sub-type" groups (street, rail,
+# trench, bridge, pipe, computer).  Used to build a per-cell legend that is
+# injected into the Gemini prompt so the model knows what each tile depicts.
+# Keys are (col, row) atlas positions; values are short human-readable labels.
+TILE_DESCRIPTIONS: dict[tuple[int, int], str] = {
+    # --- Street (rows 3-6, cols 0-4) ---
+    # Street uses JoinableModifiers with base position sprite(3, 3).
+    (0, 3): "road top-left corner, turns from south to east",
+    (1, 3): "road T-junction, connects east/west/south (open bottom)",
+    (2, 3): "road top-right corner, turns from south to west",
+    (3, 3): "road straight horizontal, connects east-west",
+    (4, 3): "road straight vertical, connects north-south",
+    (0, 4): "road T-junction, connects north/south/east (open right)",
+    (1, 4): "road 4-way crossroads intersection",
+    (2, 4): "road T-junction, connects north/south/west (open left)",
+    (3, 4): "road end-cap or tail facing east",
+    (4, 4): "road end-cap or tail facing south",
+    (0, 5): "road bottom-left corner, turns from north to east",
+    (1, 5): "road T-junction, connects east/west/north (open top)",
+    (2, 5): "road bottom-right corner, turns from north to west",
+    (3, 5): "road end-cap or tail facing west",
+    (4, 5): "road end-cap or tail facing north",
+
+    # --- Rail / RailTrack (base sprite(10, 28), JoinableModifiers) ---
+    # RailBridge base sprite(5, 0) occupies rows 0-4 cols 5-7.
+    (5, 0): "rail bridge single span, isolated rail bridge segment",
+    (6, 0): "rail bridge vertical single, short vertical rail bridge",
+    (7, 0): "rail bridge vertical, full vertical rail bridge span",
+    (11, 0): "rail track variant, isolated rail segment",
+    (5, 1): "rail bridge tail facing left, left end of rail bridge",
+    (6, 1): "rail bridge horizontal, full horizontal rail bridge span",
+    (7, 1): "rail bridge tail facing right, right end of rail bridge",
+    (11, 1): "rail track variant, rail segment",
+    (5, 2): "rail bridge connecting tail up, vertical bridge end top",
+    (6, 2): "rail bridge crossing vertical, rail bridge over crossing",
+    (7, 2): "rail bridge connecting tail right, bridge end right",
+    (11, 2): "rail track variant, rail segment",
+    (5, 3): "rail bridge connecting tail down, vertical bridge end bottom",
+    (6, 3): "rail bridge horizontal crossing, bridge over crossing",
+    (7, 3): "rail bridge connecting tail left, bridge end left",
+    (11, 3): "rail track variant, rail segment",
+    (5, 4): "rail bridge variant, rail bridge segment over water",
+    (6, 4): "rail bridge variant, rail bridge segment",
+    (7, 4): "rail bridge variant, rail bridge end piece",
+    (11, 27): "rail track single, isolated rail track segment",
+    (5, 28): "rail track crossing horizontal, rail crosses road horizontally",
+    (6, 28): "rail track crossing vertical, rail crosses road vertically",
+    (7, 28): "rail track top-left corner, turns from south to east",
+    (8, 28): "rail track T-junction bottom, connects east/west/south",
+    (9, 28): "rail track top-right corner, turns from south to west",
+    (10, 28): "rail track straight horizontal, connects east-west",
+    (11, 28): "rail track straight vertical, connects north-south",
+    (7, 29): "rail track T-junction right, connects north/south/east",
+    (8, 29): "rail track 4-way crossroads intersection",
+    (9, 29): "rail track T-junction left, connects north/south/west",
+    (10, 29): "rail track end-cap or tail facing east",
+    (11, 29): "rail track end-cap or tail facing south",
+    (10, 30): "rail track end-cap or tail facing west",
+    (11, 30): "rail track end-cap or tail facing north",
+
+    # --- Trench (base sprite(1, 16), AreaModifiers) ---
+    # Trench Single modifier at sprite(-1, -2) -> (0, 14).
+    (0, 14): "trench isolated single, standalone dug fortification",
+    (0, 15): "trench top-left area corner, fortification corner NW",
+    (1, 15): "trench top wall, fortification edge facing north",
+    (2, 15): "trench top-right area corner, fortification corner NE",
+    (3, 15): "trench bottom-right edge transition, inner corner SE",
+    (4, 15): "trench bottom-left edge transition, inner corner SW",
+    (0, 16): "trench left wall, fortification edge facing west",
+    (1, 16): "trench center, open fortification interior",
+    (2, 16): "trench right wall, fortification edge facing east",
+    (3, 16): "trench top-right edge transition, inner corner NE",
+    (4, 16): "trench top-left edge transition, inner corner NW",
+    (0, 17): "trench bottom-left area corner, fortification corner SW",
+    (1, 17): "trench bottom wall, fortification edge facing south",
+    (2, 17): "trench bottom-right area corner, fortification corner SE",
+
+    # --- Bridge (base sprite(5, 5), various modifiers) ---
+    (8, 1): "bridge vertical single, short vertical bridge over gap",
+    (8, 2): "bridge connecting tail up, vertical bridge top end",
+    (8, 3): "bridge vertical, full vertical bridge span",
+    (8, 4): "bridge connecting tail down, vertical bridge bottom end",
+    (5, 5): "bridge single, isolated bridge segment",
+    (6, 5): "bridge tail facing left, left end of bridge deck",
+    (7, 5): "bridge horizontal, full horizontal bridge span",
+    (8, 5): "bridge tail facing right, right end of bridge deck",
+
+    # --- Pipe (base sprite(5, 29), offsets into rows 27-28) ---
+    (0, 27): "pipe top-left corner, turns from south to east",
+    (1, 27): "pipe straight vertical, connects north-south",
+    (2, 27): "pipe top-right corner, turns from south to west",
+    (3, 27): "pipe straight horizontal, connects east-west",
+    (3, 28): "pipe end-cap or tail facing right",
+
+    # --- Computer (base sprite(0, 31), with Variant2 modifier) ---
+    (0, 31): "computer terminal base, primary display unit",
+    (1, 31): "computer terminal variant, secondary display unit",
+}
+
+
+def build_cell_legend(cells: list[dict], type_name: str) -> str:
+    """Build a numbered cell legend string from TILE_DESCRIPTIONS.
+
+    Parameters
+    ----------
+    cells : list[dict]
+        Cell info dicts (must contain ``col`` and ``row`` keys).
+    type_name : str
+        Fallback tile type name used when a cell has no entry in
+        TILE_DESCRIPTIONS.
+
+    Returns
+    -------
+    str
+        A formatted legend string, or empty string if no cell in
+        *cells* has an entry in TILE_DESCRIPTIONS.
+    """
+    descriptions: list[str] = []
+    has_real_desc = False
+    for cell in cells:
+        key = (cell["col"], cell["row"])
+        desc = TILE_DESCRIPTIONS.get(key)
+        if desc:
+            has_real_desc = True
+            descriptions.append(desc)
+        else:
+            descriptions.append(f"{type_name} tile")
+
+    if not has_real_desc:
+        return ""
+
+    lines = [f'{i + 1}. "{d}"' for i, d in enumerate(descriptions)]
+    return (
+        "\nThe tiles in the grid are (left-to-right, top-to-bottom):\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
 
 # Short abbreviations for tile types, used in debug atlas overlays.
 TYPE_ABBREV: dict[str, str] = {
@@ -278,43 +416,46 @@ TILE_TYPE_HINTS = {
 
 # Prompt templates for anchor generation and batch reskinning (v2 pipeline).
 ANCHOR_PROMPT_TEMPLATE = (
-    "Reskin this {type_name} game tile. "
-    "Top-down orthogonal perspective, 16-bit modern retro pixel art style, "
-    "warm and cozy color palette with soft saturation, "
-    "flat cartoon shading, clean edges, storybook illustration aesthetic. "
+    "{style_sheet_instruction}"
+    "Reskin this {type_name} game tile to a completely different visual theme. "
+    "Target style: {theme_prompt}. "
+    "Top-down orthogonal perspective, 16-bit modern retro pixel art style. "
     "{type_hint} "
     "RULES: "
     "1) Keep the exact same grid layout and tile position. "
     "2) Only change colors and textures — don't move or resize the tile. "
     "3) No text, labels, or watermarks. "
-    "4) Keep black grid lines and gray padding as-is."
+    "4) Keep black grid lines and gray padding as-is. "
+    "5) Make the style change DRAMATIC and obvious — this must look like a completely different theme."
 )
 
 BATCH_PROMPT_TEMPLATE = (
-    "Reskin the tiles in the second image to match the visual style of the first image. "
+    "{style_sheet_instruction}"
+    "Reskin the tiles in the last image to match the visual style of the anchor tile. "
     "These are {type_name} game tiles, top-down orthogonal perspective, "
-    "16-bit modern retro pixel art style, warm and cozy color palette "
-    "with soft saturation, flat cartoon shading, clean edges, "
-    "storybook illustration aesthetic. "
+    "16-bit modern retro pixel art style. "
+    "Target style: {theme_prompt}. "
     "{type_hint} "
+    "{cell_legend}"
     "RULES: "
     "1) Keep the exact same grid layout and tile positions. "
     "2) Only change colors and textures — don't move or resize tiles. "
     "3) No text, labels, or watermarks. "
     "4) Keep black grid lines and gray padding as-is. "
-    "5) Match the first image's palette and shading exactly."
+    "5) Match the anchor tile's palette and shading exactly."
 )
 
 MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE = (
+    "{style_sheet_instruction}"
     "Reskin the tiles in the last image to match the visual style of the reference images. "
-    "The first reference shows the target style for {type_name} tiles. "
+    "The main reference shows the target style for {type_name} tiles. "
     "Additional references show context colors — match water portions to any water "
     "reference and grass/land portions to any grass reference exactly. "
     "These are {type_name} game tiles, top-down orthogonal perspective, "
-    "16-bit modern retro pixel art style, warm and cozy color palette "
-    "with soft saturation, flat cartoon shading, clean edges, "
-    "storybook illustration aesthetic. "
+    "16-bit modern retro pixel art style. "
+    "Target style: {theme_prompt}. "
     "{type_hint} "
+    "{cell_legend}"
     "RULES: "
     "1) Keep the exact same grid layout and tile positions. "
     "2) Only change colors and textures — don't move or resize tiles. "
@@ -701,9 +842,7 @@ def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
 
     by_type = defaultdict(list)
     for c in batchable:
-        # Map sub-types to their parent batch type
-        batch_type = TYPE_BATCH_MAPPING.get(c["type"], c["type"])
-        by_type[batch_type].append(c)
+        by_type[c["type"]].append(c)
 
     cell_w = TILE_SIZE + CELL_PADDING * 2
     cell_h = TILE_SIZE + CELL_PADDING * 2
@@ -807,7 +946,7 @@ def generate_anchors(
 
     client = genai.Client(api_key=api_key)
 
-    terrain_order = ["plain", "street", "mountain", "forest",
+    terrain_order = ["plain", "street", "rail", "mountain", "forest",
                      "campsite", "pier", "water", "river",
                      "stormcloud", "teleporter"]
 
@@ -875,6 +1014,8 @@ def generate_anchors(
         prompt = ANCHOR_PROMPT_TEMPLATE.format(
             type_name=terrain_type,
             type_hint=type_hint,
+            theme_prompt=theme.get("prompt", ""),
+            style_sheet_instruction="",
         )
 
         img_data = open(str(original_path), "rb").read()
@@ -917,6 +1058,120 @@ def generate_anchors(
 
     print(f"  Generated {len(anchors)}/{len(representatives)} anchors")
     return anchors
+
+
+def generate_style_reference_sheet(
+    anchor_paths: dict[str, str],
+    work_dir: Path,
+) -> Path:
+    """Create a reference sheet grid of all anchor tiles for global coherence.
+
+    Composes all generated anchor tiles into a labeled grid image so that
+    every batch API call can see the full world palette at a glance.
+
+    Parameters
+    ----------
+    anchor_paths : dict[str, str]
+        Mapping of terrain type name to path of the anchor PNG.
+    work_dir : Path
+        Directory to save the sheet in.
+
+    Returns
+    -------
+    Path
+        Path to the saved ``style_reference_sheet.png``.
+    """
+    # Canonical display order — matches terrain_order in generate_anchors()
+    display_order = [
+        "plain", "street", "mountain", "forest", "campsite",
+        "pier", "water", "river", "stormcloud", "teleporter", "rail",
+    ]
+
+    # Filter to anchors that actually exist
+    ordered_types = [t for t in display_order if t in anchor_paths]
+    if not ordered_types:
+        # Fallback: use whatever is available, sorted
+        ordered_types = sorted(anchor_paths.keys())
+
+    n = len(ordered_types)
+    if n == 0:
+        raise ValueError("No anchor paths provided for style reference sheet")
+
+    # Grid layout: up to 5 columns
+    grid_cols = min(n, 5)
+    grid_rows = math.ceil(n / grid_cols)
+
+    # Each cell: tile scaled 5× (24×5=120) + 20px label area below
+    scale = 5
+    tile_display = TILE_SIZE * scale  # 120
+    label_height = 20
+    cell_w = tile_display
+    cell_h = tile_display + label_height
+
+    # Sheet dimensions with 4px margin
+    margin = 4
+    sheet_w = grid_cols * cell_w + margin * 2
+    sheet_h = grid_rows * cell_h + margin * 2
+
+    # Dark background
+    sheet = Image.new("RGBA", (sheet_w, sheet_h), (30, 30, 30, 255))
+    draw = ImageDraw.Draw(sheet)
+
+    # Load a small font for labels
+    try:
+        label_font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 12
+        )
+    except Exception:
+        label_font = ImageFont.load_default()
+
+    for idx, terrain_type in enumerate(ordered_types):
+        row = idx // grid_cols
+        col = idx % grid_cols
+
+        x0 = margin + col * cell_w
+        y0 = margin + row * cell_h
+
+        # Load and scale the anchor tile (original 24×24 PNG from the cell,
+        # but anchors are saved as scaled grid images — extract the tile area)
+        anchor_img = Image.open(anchor_paths[terrain_type]).convert("RGBA")
+
+        # Anchors are single-cell grids at 4× scale. Extract the inner tile
+        # and downscale to native 24×24 first, then upscale cleanly to avoid
+        # uneven 96→120 scaling that distorts pixel art.
+        anchor_scale = 4
+        inner_offset = (GRID_LINE_WIDTH + CELL_PADDING) * anchor_scale
+        inner_size = TILE_SIZE * anchor_scale
+        if (anchor_img.width >= inner_offset + inner_size and
+                anchor_img.height >= inner_offset + inner_size):
+            tile_crop = anchor_img.crop((
+                inner_offset, inner_offset,
+                inner_offset + inner_size, inner_offset + inner_size,
+            ))
+        else:
+            tile_crop = anchor_img
+
+        # Downscale to native tile size, then upscale by clean integer
+        native = tile_crop.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
+        tile_display_img = native.resize(
+            (tile_display, tile_display), Image.NEAREST,
+        )
+
+        sheet.paste(tile_display_img, (x0, y0), tile_display_img)
+
+        # Draw label centered below tile
+        label = terrain_type
+        label_x = x0 + tile_display // 2
+        label_y = y0 + tile_display + label_height // 2
+        draw.text(
+            (label_x, label_y), label,
+            font=label_font, fill=(220, 220, 220, 255), anchor="mm",
+        )
+
+    sheet_path = work_dir / "style_reference_sheet.png"
+    sheet.save(sheet_path)
+    print(f"  Generated style reference sheet: {sheet_path}")
+    return sheet_path
 
 
 def extract_palette(
@@ -1330,6 +1585,8 @@ def reskin_batch_gemini(
     batch_id: str,
     tile_type: str,
     anchor_paths: list[str] | None = None,
+    cells: list[dict] | None = None,
+    style_sheet_path: str | None = None,
 ) -> Image.Image | None:
     """Send a batch grid to Gemini Flash for reskinning.
 
@@ -1339,6 +1596,14 @@ def reskin_batch_gemini(
     ``MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE`` with all anchors then the batch.
     When ``None`` or empty, falls back to the single-image
     ``ANCHOR_PROMPT_TEMPLATE``.
+
+    When *cells* is provided, a per-cell legend is built from
+    ``TILE_DESCRIPTIONS`` and injected into the prompt so the model knows
+    what each tile in the grid depicts.
+
+    When *style_sheet_path* is provided, the style reference sheet image is
+    prepended as the first image in the ``contents`` list and a matching
+    instruction is added to the prompt for global coherence.
     """
     from google import genai
     from google.genai import types
@@ -1352,13 +1617,38 @@ def reskin_batch_gemini(
 
     type_hint = TILE_TYPE_HINTS.get(tile_type, "")
 
+    # Build cell legend from TILE_DESCRIPTIONS when cells are available.
+    cell_legend = ""
+    if cells:
+        cell_legend = build_cell_legend(cells, tile_type)
+
+    # Build style sheet instruction and image part
+    style_sheet_instruction = ""
+    style_sheet_part = None
+    if style_sheet_path:
+        style_sheet_instruction = (
+            "The first image is a world style reference showing all terrain "
+            "types in this theme. Your output must visually belong in this "
+            "world — match the overall color temperature, shading style, "
+            "and level of detail. "
+        )
+        sheet_data = open(style_sheet_path, "rb").read()
+        style_sheet_part = types.Part.from_bytes(
+            data=sheet_data, mime_type="image/png",
+        )
+
     if anchor_paths and len(anchor_paths) > 1:
         # Multi-anchor prompt: type anchor + plain anchor + batch to reskin
         prompt = MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE.format(
             type_name=tile_type, type_hint=type_hint,
+            theme_prompt=theme.get("prompt", ""),
+            cell_legend=cell_legend,
+            style_sheet_instruction=style_sheet_instruction,
         )
 
         contents: list = [prompt]
+        if style_sheet_part is not None:
+            contents.append(style_sheet_part)
         for ap in anchor_paths:
             data = open(ap, "rb").read()
             contents.append(types.Part.from_bytes(data=data, mime_type="image/png"))
@@ -1368,22 +1658,33 @@ def reskin_batch_gemini(
         # Two-image prompt: anchor tile + batch to reskin
         prompt = BATCH_PROMPT_TEMPLATE.format(
             type_name=tile_type, type_hint=type_hint,
+            theme_prompt=theme.get("prompt", ""),
+            cell_legend=cell_legend,
+            style_sheet_instruction=style_sheet_instruction,
         )
 
+        contents = [prompt]
+        if style_sheet_part is not None:
+            contents.append(style_sheet_part)
         anchor_data = open(anchor_paths[0], "rb").read()
         anchor_part = types.Part.from_bytes(data=anchor_data, mime_type="image/png")
         batch_data = open(batch_path, "rb").read()
         batch_part = types.Part.from_bytes(data=batch_data, mime_type="image/png")
-        contents = [prompt, anchor_part, batch_part]
+        contents.extend([anchor_part, batch_part])
     else:
         # Single-image prompt (backward compat fallback)
         prompt = ANCHOR_PROMPT_TEMPLATE.format(
             type_name=tile_type, type_hint=type_hint,
+            theme_prompt=theme.get("prompt", ""),
+            style_sheet_instruction=style_sheet_instruction,
         )
 
+        contents = [prompt]
+        if style_sheet_part is not None:
+            contents.append(style_sheet_part)
         img_data = open(batch_path, "rb").read()
         image_part = types.Part.from_bytes(data=img_data, mime_type="image/png")
-        contents = [prompt, image_part]
+        contents.append(image_part)
 
     for attempt in range(3):
         try:
@@ -1481,9 +1782,9 @@ def extract_from_reskinned(
     scaled_h = native_h * scale_factor
 
     if reskinned_img.size != (scaled_w, scaled_h):
-        reskinned_img = reskinned_img.resize((scaled_w, scaled_h), Image.LANCZOS)
+        reskinned_img = reskinned_img.resize((scaled_w, scaled_h), Image.NEAREST)
 
-    native_img = reskinned_img.resize((native_w, native_h), Image.LANCZOS)
+    native_img = reskinned_img.resize((native_w, native_h), Image.NEAREST)
 
     results = []
     for cell_info in batch_meta["cells"]:
@@ -1683,6 +1984,7 @@ def _reskin_batches(
     reskinned_dir: Path,
     workers: int,
     anchor_paths: dict[str, str] | None = None,
+    style_sheet_path: str | None = None,
 ) -> list[tuple[dict, Image.Image]]:
     """Reskin batches using parallel workers."""
     import concurrent.futures
@@ -1737,32 +2039,42 @@ def _reskin_batches(
                 )
             batch_anchor_paths = None
             if anchor_paths:
-                type_anchor = anchor_paths.get(tile_type)
+                # Use ANCHOR_INHERITANCE to find the right anchor for
+                # sub-types that don't generate their own.
+                type_anchor_key = ANCHOR_INHERITANCE.get(tile_type, tile_type)
+                type_anchor = anchor_paths.get(type_anchor_key)
                 if type_anchor:
                     batch_anchor_paths = [type_anchor]
                     # For transition types, include additional anchors so
                     # Gemini can match adjacent-terrain colors exactly.
                     plain_anchor = anchor_paths.get("plain")
                     water_anchor = anchor_paths.get("water")
-                    if tile_type in ("water", "river"):
-                        # Water/river (+ reef, sea_object via batching):
+                    if type_anchor_key in ("water", "river"):
+                        # Water/river/reef/sea_object/floatingedge:
                         # add plain anchor for grass in coastlines/banks
                         if plain_anchor and plain_anchor != type_anchor:
                             batch_anchor_paths.append(plain_anchor)
-                    elif tile_type == "pier":
+                    elif type_anchor_key == "pier":
                         # Pier: add water anchor + plain anchor (borders touch both)
                         if water_anchor and water_anchor != type_anchor:
                             batch_anchor_paths.append(water_anchor)
                         if plain_anchor and plain_anchor != type_anchor:
                             batch_anchor_paths.append(plain_anchor)
-                    elif tile_type in ("street", "mountain", "forest", "campsite"):
-                        # Street (+ trench, bridge, rail, pipe via batching),
+                    elif type_anchor_key in ("street", "plain", "rail"):
+                        # Street/trench/bridge/pipe/computer/lightning,
+                        # rail, and plain-inheriting types: add plain anchor
+                        # for grass context.
+                        if plain_anchor and plain_anchor != type_anchor:
+                            batch_anchor_paths.append(plain_anchor)
+                    elif type_anchor_key in ("mountain", "forest", "campsite"):
                         # Mountain, Forest, Campsite: add plain anchor for grass
                         if plain_anchor and plain_anchor != type_anchor:
                             batch_anchor_paths.append(plain_anchor)
             reskinned_img = reskin_batch_gemini(
                 batch_meta["path"], theme, batch_id, tile_type,
                 anchor_paths=batch_anchor_paths,
+                cells=batch_meta.get("cells"),
+                style_sheet_path=style_sheet_path,
             )
             if reskinned_img is None:
                 with print_lock:
@@ -2056,6 +2368,9 @@ def main():
         print("\n--- Stage 1: Generating anchor tiles ---")
         anchor_paths = generate_anchors(cells, theme, work_dir)
 
+        print("\n--- Stage 1: Generating style reference sheet ---")
+        style_sheet_path = str(generate_style_reference_sheet(anchor_paths, work_dir))
+
         print("\n--- Stage 1: Extracting palette from anchors ---")
         palette_lab = extract_palette(anchor_paths, work_dir)
 
@@ -2098,7 +2413,7 @@ def main():
         if args.stage == "2":
             anchor_paths = {}
             for ttype in [
-                "plain", "street", "mountain", "forest",
+                "plain", "street", "rail", "mountain", "forest",
                 "campsite", "pier", "water", "river",
                 "stormcloud", "teleporter",
             ]:
@@ -2108,6 +2423,15 @@ def main():
             if not anchor_paths:
                 print("ERROR: No anchor tiles found. Run --stage 1 first.")
                 sys.exit(1)
+
+        # Load or generate style reference sheet
+        sheet_file = work_dir / "style_reference_sheet.png"
+        if not sheet_file.exists() and anchor_paths:
+            style_sheet_path = str(generate_style_reference_sheet(anchor_paths, work_dir))
+        elif sheet_file.exists():
+            style_sheet_path = str(sheet_file)
+        else:
+            style_sheet_path = None
 
         # Load palette (always from palette.json for consistency)
         palette_json_path = work_dir / "palette.json"
@@ -2132,6 +2456,7 @@ def main():
         all_reskinned_cells = _reskin_batches(
             target_batches, theme, reskinned_dir, args.workers,
             anchor_paths=anchor_paths,
+            style_sheet_path=style_sheet_path,
         )
 
         # If --type-only, load non-targeted types from cache

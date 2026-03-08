@@ -69,8 +69,6 @@ class TestClassifyCell:
     def test_street_cells(self):
         assert reskin_tiles.classify_cell(3, 3) == "street"
         assert reskin_tiles.classify_cell(0, 5) == "street"
-        # Row 6 cols 3-4 are street (boundary)
-        assert reskin_tiles.classify_cell(3, 6) == "street"
 
     def test_mountain_cells(self):
         assert reskin_tiles.classify_cell(3, 7) == "mountain"
@@ -264,8 +262,8 @@ class TestCreateTypedBatches:
         assert "plain" in types
         assert "water" in types
 
-    def test_subtypes_batch_with_parent(self, tmp_path):
-        """Sub-types batch with their parent via TYPE_BATCH_MAPPING."""
+    def test_subtypes_batch_independently(self, tmp_path):
+        """Sub-types batch under their own raw type, not a merged parent."""
         cells = [
             _make_cell(0, 3, tmp_path=tmp_path, cell_type="street", is_anim_frame=False),
             _make_cell(0, 15, tmp_path=tmp_path, cell_type="trench", is_anim_frame=False),
@@ -273,10 +271,34 @@ class TestCreateTypedBatches:
         ]
         batches = reskin_tiles.create_typed_batches(cells, tmp_path)
 
-        # trench and bridge batch with street -> only 1 batch
-        assert len(batches) == 1
-        assert batches[0]["tile_type"] == "street"
-        assert len(batches[0]["cells"]) == 3
+        # Each sub-type gets its own batch
+        assert len(batches) == 3
+        batch_types = {b["tile_type"] for b in batches}
+        assert batch_types == {"street", "trench", "bridge"}
+        for b in batches:
+            assert len(b["cells"]) == 1
+
+    def test_anchor_inheritance(self):
+        """ANCHOR_INHERITANCE maps sub-types to the correct parent anchor."""
+        ai = reskin_tiles.ANCHOR_INHERITANCE
+        # Sub-types that should inherit from plain
+        assert ai["trench"] == "plain"
+        assert ai["lightning"] == "plain"
+        # Sub-types that should inherit from street
+        assert ai["bridge"] == "street"
+        assert ai["pipe"] == "street"
+        assert ai["computer"] == "street"
+        # Sub-types that should inherit from water
+        assert ai["floatingedge"] == "water"
+        assert ai["sea_object"] == "water"
+        assert ai["reef"] == "water"
+        # Types that generate their own anchor should NOT be in the dict
+        for own_anchor_type in ("plain", "street", "rail", "mountain", "forest",
+                                "campsite", "pier", "water", "river",
+                                "stormcloud", "teleporter"):
+            assert own_anchor_type not in ai, (
+                f"{own_anchor_type} should not be in ANCHOR_INHERITANCE"
+            )
 
     def test_batch_size_limit(self, tmp_path):
         """Batches should not exceed CELLS_PER_BATCH (36)."""
@@ -1910,3 +1932,338 @@ class TestHarmonizeTransitionsExtended:
         mountain_in = np.array(mountain_img)
         np.testing.assert_array_equal(mountain_out, mountain_in,
             err_msg="Interior mountain cells should pass through unchanged")
+
+
+# ---------------------------------------------------------------------------
+# TILE_DESCRIPTIONS
+# ---------------------------------------------------------------------------
+
+class TestTileDescriptionsExistForStreetSubtypes:
+    """Verify TILE_DESCRIPTIONS has entries for all street sub-type groups."""
+
+    def _cells_of_type(self, tile_type):
+        """Return all (col, row) pairs in TILE_CELL_MAP with the given type."""
+        return [
+            pos for pos, t in reskin_tiles.TILE_CELL_MAP.items()
+            if t == tile_type
+        ]
+
+    def test_street_cells_have_descriptions(self):
+        """At least some street cells should have TILE_DESCRIPTIONS entries."""
+        street_cells = self._cells_of_type("street")
+        assert len(street_cells) > 0, "No street cells found in TILE_CELL_MAP"
+        described = [
+            pos for pos in street_cells
+            if pos in reskin_tiles.TILE_DESCRIPTIONS
+        ]
+        assert len(described) > 0, "No street cells have TILE_DESCRIPTIONS"
+        # All street cells should be covered
+        assert len(described) == len(street_cells), (
+            f"Missing descriptions for street cells: "
+            f"{set(street_cells) - set(described)}"
+        )
+
+    def test_rail_cells_have_descriptions(self):
+        """At least some rail cells should have TILE_DESCRIPTIONS entries."""
+        rail_cells = self._cells_of_type("rail")
+        assert len(rail_cells) > 0, "No rail cells found in TILE_CELL_MAP"
+        described = [
+            pos for pos in rail_cells
+            if pos in reskin_tiles.TILE_DESCRIPTIONS
+        ]
+        assert len(described) > 0, "No rail cells have TILE_DESCRIPTIONS"
+
+    def test_trench_cells_have_descriptions(self):
+        """At least some trench cells should have TILE_DESCRIPTIONS entries."""
+        trench_cells = self._cells_of_type("trench")
+        assert len(trench_cells) > 0, "No trench cells found in TILE_CELL_MAP"
+        described = [
+            pos for pos in trench_cells
+            if pos in reskin_tiles.TILE_DESCRIPTIONS
+        ]
+        assert len(described) > 0, "No trench cells have TILE_DESCRIPTIONS"
+        assert len(described) == len(trench_cells), (
+            f"Missing descriptions for trench cells: "
+            f"{set(trench_cells) - set(described)}"
+        )
+
+    def test_bridge_cells_have_descriptions(self):
+        """At least some bridge cells should have TILE_DESCRIPTIONS entries."""
+        bridge_cells = self._cells_of_type("bridge")
+        assert len(bridge_cells) > 0, "No bridge cells found in TILE_CELL_MAP"
+        described = [
+            pos for pos in bridge_cells
+            if pos in reskin_tiles.TILE_DESCRIPTIONS
+        ]
+        assert len(described) > 0, "No bridge cells have TILE_DESCRIPTIONS"
+        assert len(described) == len(bridge_cells), (
+            f"Missing descriptions for bridge cells: "
+            f"{set(bridge_cells) - set(described)}"
+        )
+
+    def test_pipe_cells_have_descriptions(self):
+        """At least some pipe cells should have TILE_DESCRIPTIONS entries."""
+        pipe_cells = self._cells_of_type("pipe")
+        assert len(pipe_cells) > 0, "No pipe cells found in TILE_CELL_MAP"
+        described = [
+            pos for pos in pipe_cells
+            if pos in reskin_tiles.TILE_DESCRIPTIONS
+        ]
+        assert len(described) > 0, "No pipe cells have TILE_DESCRIPTIONS"
+        assert len(described) == len(pipe_cells), (
+            f"Missing descriptions for pipe cells: "
+            f"{set(pipe_cells) - set(described)}"
+        )
+
+    def test_computer_cells_have_descriptions(self):
+        """At least some computer cells should have TILE_DESCRIPTIONS entries."""
+        computer_cells = self._cells_of_type("computer")
+        assert len(computer_cells) > 0, "No computer cells found in TILE_CELL_MAP"
+        described = [
+            pos for pos in computer_cells
+            if pos in reskin_tiles.TILE_DESCRIPTIONS
+        ]
+        assert len(described) > 0, "No computer cells have TILE_DESCRIPTIONS"
+        assert len(described) == len(computer_cells), (
+            f"Missing descriptions for computer cells: "
+            f"{set(computer_cells) - set(described)}"
+        )
+
+    def test_descriptions_are_nonempty_strings(self):
+        """All TILE_DESCRIPTIONS values must be non-empty strings."""
+        for key, desc in reskin_tiles.TILE_DESCRIPTIONS.items():
+            assert isinstance(desc, str), f"Description for {key} is not a string"
+            assert len(desc.strip()) > 0, f"Description for {key} is empty"
+
+    def test_all_described_positions_are_in_tile_cell_map(self):
+        """Every position in TILE_DESCRIPTIONS must also exist in TILE_CELL_MAP."""
+        for pos in reskin_tiles.TILE_DESCRIPTIONS:
+            assert pos in reskin_tiles.TILE_CELL_MAP, (
+                f"TILE_DESCRIPTIONS has position {pos} not in TILE_CELL_MAP"
+            )
+
+
+# ---------------------------------------------------------------------------
+# build_cell_legend
+# ---------------------------------------------------------------------------
+
+class TestCellLegendGeneration:
+    """Verify build_cell_legend correctly builds legends from TILE_DESCRIPTIONS."""
+
+    def test_legend_with_described_cells(self):
+        """Cells with TILE_DESCRIPTIONS entries produce a numbered legend."""
+        cells = [
+            {"col": 0, "row": 3},  # street top-left corner
+            {"col": 3, "row": 3},  # street horizontal
+        ]
+        legend = reskin_tiles.build_cell_legend(cells, "street")
+        assert "The tiles in the grid are" in legend
+        assert '1. "road top-left corner' in legend
+        assert '2. "road straight horizontal' in legend
+
+    def test_legend_with_no_descriptions(self):
+        """Cells with no TILE_DESCRIPTIONS entries produce empty string."""
+        cells = [
+            {"col": 99, "row": 99},
+            {"col": 98, "row": 98},
+        ]
+        legend = reskin_tiles.build_cell_legend(cells, "water")
+        assert legend == ""
+
+    def test_legend_mixed_described_and_default(self):
+        """Mix of described and undescribed cells uses default for unknowns."""
+        cells = [
+            {"col": 0, "row": 3},   # has description
+            {"col": 99, "row": 99},  # no description -> default
+        ]
+        legend = reskin_tiles.build_cell_legend(cells, "street")
+        assert legend != ""
+        assert '1. "road top-left corner' in legend
+        assert '2. "street tile"' in legend
+
+    def test_legend_single_cell(self):
+        """A single described cell should produce a one-line legend."""
+        cells = [{"col": 0, "row": 31}]  # computer terminal base
+        legend = reskin_tiles.build_cell_legend(cells, "computer")
+        assert "The tiles in the grid are" in legend
+        assert '1. "computer terminal base' in legend
+
+    def test_legend_empty_cells_list(self):
+        """An empty cells list should produce empty string."""
+        legend = reskin_tiles.build_cell_legend([], "plain")
+        assert legend == ""
+
+    def test_legend_numbering_sequential(self):
+        """Legend numbering should be 1-based and sequential."""
+        cells = [
+            {"col": 0, "row": 3},
+            {"col": 1, "row": 3},
+            {"col": 2, "row": 3},
+        ]
+        legend = reskin_tiles.build_cell_legend(cells, "street")
+        assert "1. " in legend
+        assert "2. " in legend
+        assert "3. " in legend
+
+
+# ---------------------------------------------------------------------------
+# generate_style_reference_sheet
+# ---------------------------------------------------------------------------
+
+class TestGenerateStyleReferenceSheet:
+    """Tests for style reference sheet generation."""
+
+    def _make_anchor(self, path: Path, color: tuple):
+        """Create a synthetic anchor image (single-cell grid at 4x scale)."""
+        ts = reskin_tiles.TILE_SIZE  # 24
+        pad = reskin_tiles.CELL_PADDING  # 4
+        glw = reskin_tiles.GRID_LINE_WIDTH  # 2
+        native_w = ts + pad * 2 + glw * 2  # 36
+        native_h = native_w
+
+        native_img = Image.new("RGBA", (native_w, native_h), (0, 0, 0, 255))
+        # Fill tile region with the desired color
+        for y in range(glw + pad, glw + pad + ts):
+            for x in range(glw + pad, glw + pad + ts):
+                native_img.putpixel((x, y), color)
+
+        scaled = native_img.resize((native_w * 4, native_h * 4), Image.NEAREST)
+        scaled.save(path)
+
+    def test_creates_file(self, tmp_path):
+        """generate_style_reference_sheet should create the sheet PNG."""
+        anchor_paths = {}
+        for t in ("plain", "water", "forest"):
+            p = tmp_path / f"anchor_{t}.png"
+            self._make_anchor(p, (100, 150, 200, 255))
+            anchor_paths[t] = str(p)
+
+        sheet_path = reskin_tiles.generate_style_reference_sheet(
+            anchor_paths, tmp_path,
+        )
+
+        assert sheet_path.exists()
+        assert sheet_path.name == "style_reference_sheet.png"
+
+    def test_output_dimensions_reasonable(self, tmp_path):
+        """Sheet dimensions should scale with the number of anchors."""
+        anchor_paths = {}
+        for t in ("plain", "street", "mountain", "forest", "water"):
+            p = tmp_path / f"anchor_{t}.png"
+            self._make_anchor(p, (80, 120, 160, 255))
+            anchor_paths[t] = str(p)
+
+        sheet_path = reskin_tiles.generate_style_reference_sheet(
+            anchor_paths, tmp_path,
+        )
+
+        img = Image.open(sheet_path)
+        # 5 anchors -> 5 cols x 1 row, each cell 120px wide + margin
+        # Width should be around 5*120 + 8 = 608
+        assert img.width >= 5 * 120
+        assert img.height >= 120  # at least one row of tiles + labels
+
+    def test_all_anchor_types_present(self, tmp_path):
+        """Sheet should include all provided anchor types."""
+        types_to_create = [
+            "plain", "street", "mountain", "forest", "campsite",
+            "pier", "water", "river", "stormcloud", "teleporter",
+        ]
+        anchor_paths = {}
+        for t in types_to_create:
+            p = tmp_path / f"anchor_{t}.png"
+            self._make_anchor(p, (60 + hash(t) % 100, 100, 150, 255))
+            anchor_paths[t] = str(p)
+
+        sheet_path = reskin_tiles.generate_style_reference_sheet(
+            anchor_paths, tmp_path,
+        )
+
+        img = Image.open(sheet_path)
+        # 10 anchors -> 5 cols x 2 rows
+        # Height should accommodate 2 rows
+        assert img.height >= 2 * 120
+
+    def test_single_anchor(self, tmp_path):
+        """Sheet should work with a single anchor."""
+        p = tmp_path / "anchor_plain.png"
+        self._make_anchor(p, (100, 200, 50, 255))
+        anchor_paths = {"plain": str(p)}
+
+        sheet_path = reskin_tiles.generate_style_reference_sheet(
+            anchor_paths, tmp_path,
+        )
+
+        assert sheet_path.exists()
+        img = Image.open(sheet_path)
+        assert img.width > 0
+        assert img.height > 0
+
+    def test_empty_anchor_paths_raises(self, tmp_path):
+        """Empty anchor_paths should raise ValueError."""
+        with pytest.raises(ValueError, match="No anchor paths"):
+            reskin_tiles.generate_style_reference_sheet({}, tmp_path)
+
+    def test_includes_rail_when_present(self, tmp_path):
+        """Rail anchor should be included in the sheet when available."""
+        anchor_paths = {}
+        for t in ("plain", "rail"):
+            p = tmp_path / f"anchor_{t}.png"
+            self._make_anchor(p, (100, 150, 200, 255))
+            anchor_paths[t] = str(p)
+
+        sheet_path = reskin_tiles.generate_style_reference_sheet(
+            anchor_paths, tmp_path,
+        )
+
+        assert sheet_path.exists()
+        img = Image.open(sheet_path)
+        # 2 anchors -> 2 cols x 1 row
+        assert img.width >= 2 * 120
+
+
+# ---------------------------------------------------------------------------
+# style_sheet_instruction in prompt templates
+# ---------------------------------------------------------------------------
+
+class TestStyleSheetInstructionInPrompts:
+    """Verify {style_sheet_instruction} placeholder exists in all templates."""
+
+    def test_anchor_prompt_has_placeholder(self):
+        assert "{style_sheet_instruction}" in reskin_tiles.ANCHOR_PROMPT_TEMPLATE
+
+    def test_batch_prompt_has_placeholder(self):
+        assert "{style_sheet_instruction}" in reskin_tiles.BATCH_PROMPT_TEMPLATE
+
+    def test_multi_anchor_batch_prompt_has_placeholder(self):
+        assert "{style_sheet_instruction}" in reskin_tiles.MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE
+
+    def test_empty_instruction_produces_clean_prompt(self):
+        """When style_sheet_instruction is empty, prompt should not have
+        leading whitespace or artifacts."""
+        prompt = reskin_tiles.BATCH_PROMPT_TEMPLATE.format(
+            style_sheet_instruction="",
+            type_name="water",
+            type_hint="",
+            theme_prompt="cozy autumn",
+            cell_legend="",
+        )
+        assert prompt.startswith("Reskin the tiles")
+
+    def test_instruction_prepended_when_provided(self):
+        """When style_sheet_instruction is set, it should appear at the
+        start of the prompt."""
+        instruction = (
+            "The first image is a world style reference showing all terrain "
+            "types in this theme. Your output must visually belong in this "
+            "world — match the overall color temperature, shading style, "
+            "and level of detail. "
+        )
+        prompt = reskin_tiles.BATCH_PROMPT_TEMPLATE.format(
+            style_sheet_instruction=instruction,
+            type_name="water",
+            type_hint="",
+            theme_prompt="cozy autumn",
+            cell_legend="",
+        )
+        assert prompt.startswith("The first image is a world style reference")
