@@ -1656,14 +1656,21 @@ def reassemble_atlas(
 ):
     """Patch reskinned cells back into the atlas at exact positions."""
     atlas = Image.open(original_atlas_path).convert("RGBA")
+    orig_arr = np.array(atlas)
 
     for cell_info, tile_img in reskinned_cells:
         x = cell_info["x"]
         y = cell_info["y"]
 
-        clear = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
-        atlas.paste(clear, (x, y))
-        atlas.paste(tile_img, (x, y), tile_img)
+        # Restore original alpha mask so Gemini can't shift tile boundaries
+        orig_alpha = orig_arr[y:y + TILE_SIZE, x:x + TILE_SIZE, 3]
+        tile_arr = np.array(tile_img.convert("RGBA"))
+        tile_arr[:, :, 3] = orig_alpha
+        tile_img = Image.fromarray(tile_arr)
+
+        # Raw paste (no mask) to preserve exact alpha values —
+        # using tile_img as mask would alpha-composite and distort semi-transparent pixels
+        atlas.paste(tile_img, (x, y))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     atlas.save(output_path)
