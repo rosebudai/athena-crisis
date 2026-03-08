@@ -198,6 +198,7 @@ TYPE_BATCH_MAPPING: dict[str, str] = {
     "pipe": "street",
     "lightning": "plain",
     "computer": "street",
+    "floatingedge": "water",
 }
 
 # Short abbreviations for tile types, used in debug atlas overlays.
