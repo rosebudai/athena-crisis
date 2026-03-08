@@ -74,17 +74,130 @@ ANIMATED_TILES = [
     ("FE_AreaDecor",         9,       20,      4,      2,    False,       0),
 ]
 
-# Tile type row ranges — derived from sprite positions in athena/info/Tile.tsx.
-# "water" merges sea + beach rows for coastline consistency.
-TILE_TYPE_ROWS = {
-    "plain":      (0, 2),
-    "street":     (3, 6),
-    "mountain":   (7, 18),
-    "forest":     (19, 26),
-    "campsite":   (27, 28),
-    "pier":       (29, 34),
-    "water":      (35, 72),   # sea (35-58) + beach frames (59-72)
-    "river":      (73, 144),
+# Per-cell type mapping — derived from sprite positions in athena/info/Tile.tsx.
+# Every occupied (col, row) in the Tiles0 atlas is mapped to a semantic type.
+# Types: plain, street, mountain, forest, campsite, pier, water, river,
+#        stormcloud, reef, sea_object, trench, bridge, rail, teleporter,
+#        computer, floatingedge, lightning, pipe.
+TILE_CELL_MAP: dict[tuple[int, int], str] = {
+    # --- Rows 0-2: Plain, Rail, Bridge, Lightning ---
+    (0, 0): "plain", (1, 0): "plain", (2, 0): "plain", (5, 0): "rail", (6, 0): "rail", (7, 0): "rail", (8, 0): "plain", (9, 0): "floatingedge", (10, 0): "lightning", (11, 0): "rail",
+    (0, 1): "plain", (1, 1): "plain", (2, 1): "plain", (3, 1): "plain", (4, 1): "plain", (5, 1): "rail", (6, 1): "rail", (7, 1): "rail", (8, 1): "bridge", (9, 1): "floatingedge", (10, 1): "lightning", (11, 1): "rail",
+    (0, 2): "plain", (1, 2): "plain", (2, 2): "plain", (5, 2): "rail", (6, 2): "rail", (7, 2): "rail", (8, 2): "bridge", (9, 2): "floatingedge", (10, 2): "lightning", (11, 2): "rail",
+    # --- Rows 3-5: Street, Rail, Bridge ---
+    (0, 3): "street", (1, 3): "street", (2, 3): "street", (3, 3): "street", (4, 3): "street", (5, 3): "rail", (6, 3): "rail", (7, 3): "rail", (8, 3): "bridge", (9, 3): "floatingedge", (10, 3): "lightning", (11, 3): "rail",
+    (0, 4): "street", (1, 4): "street", (2, 4): "street", (3, 4): "street", (4, 4): "street", (5, 4): "rail", (6, 4): "rail", (7, 4): "rail", (8, 4): "bridge",
+    (0, 5): "street", (1, 5): "street", (2, 5): "street", (3, 5): "street", (4, 5): "street", (5, 5): "bridge", (6, 5): "bridge", (7, 5): "bridge", (8, 5): "bridge",
+    # --- Row 6: Mountain/Street boundary ---
+    (0, 6): "mountain", (3, 6): "street", (4, 6): "street", (5, 6): "stormcloud", (6, 6): "stormcloud", (7, 6): "stormcloud", (10, 6): "lightning",
+    # --- Rows 7-13: Mountain + StormCloud ---
+    (0, 7): "mountain", (1, 7): "mountain", (2, 7): "mountain", (3, 7): "mountain", (4, 7): "mountain", (5, 7): "stormcloud", (6, 7): "stormcloud", (7, 7): "stormcloud", (8, 7): "stormcloud", (10, 7): "lightning",
+    (0, 8): "mountain", (1, 8): "mountain", (2, 8): "mountain", (3, 8): "mountain", (4, 8): "mountain", (5, 8): "stormcloud", (6, 8): "stormcloud", (7, 8): "stormcloud", (8, 8): "stormcloud", (9, 8): "floatingedge", (10, 8): "lightning", (11, 8): "lightning",
+    (0, 9): "mountain", (1, 9): "mountain", (2, 9): "mountain", (3, 9): "mountain", (4, 9): "mountain", (5, 9): "stormcloud", (6, 9): "stormcloud", (7, 9): "stormcloud", (9, 9): "floatingedge", (10, 9): "lightning", (11, 9): "lightning",
+    (0, 10): "mountain", (3, 10): "mountain", (4, 10): "mountain", (5, 10): "stormcloud", (6, 10): "stormcloud", (7, 10): "stormcloud", (8, 10): "stormcloud", (9, 10): "floatingedge", (11, 10): "stormcloud",
+    (0, 11): "mountain", (1, 11): "mountain", (2, 11): "mountain", (3, 11): "mountain", (4, 11): "mountain", (5, 11): "stormcloud", (6, 11): "stormcloud", (7, 11): "stormcloud", (8, 11): "stormcloud", (9, 11): "floatingedge", (11, 11): "stormcloud",
+    (0, 12): "mountain", (1, 12): "mountain", (2, 12): "mountain", (3, 12): "mountain", (4, 12): "mountain", (5, 12): "stormcloud", (6, 12): "stormcloud", (7, 12): "stormcloud", (9, 12): "floatingedge", (10, 12): "floatingedge",
+    (0, 13): "mountain", (1, 13): "mountain", (2, 13): "mountain", (3, 13): "mountain", (4, 13): "mountain", (5, 13): "stormcloud", (6, 13): "stormcloud", (7, 13): "stormcloud", (8, 13): "stormcloud", (9, 13): "floatingedge", (10, 13): "floatingedge",
+    # --- Rows 14-17: Trench + StormCloud ---
+    (0, 14): "trench", (5, 14): "stormcloud", (6, 14): "stormcloud", (7, 14): "stormcloud", (8, 14): "stormcloud", (9, 14): "floatingedge", (10, 14): "floatingedge",
+    (0, 15): "trench", (1, 15): "trench", (2, 15): "trench", (3, 15): "trench", (4, 15): "trench", (5, 15): "stormcloud", (6, 15): "stormcloud", (7, 15): "stormcloud", (9, 15): "floatingedge", (10, 15): "floatingedge",
+    (0, 16): "trench", (1, 16): "trench", (2, 16): "trench", (3, 16): "trench", (4, 16): "trench", (5, 16): "stormcloud", (6, 16): "stormcloud", (7, 16): "stormcloud", (8, 16): "stormcloud", (9, 16): "floatingedge", (10, 16): "floatingedge",
+    (0, 17): "trench", (1, 17): "trench", (2, 17): "trench", (5, 17): "stormcloud", (6, 17): "stormcloud", (7, 17): "stormcloud", (8, 17): "stormcloud", (9, 17): "floatingedge", (10, 17): "floatingedge",
+    # --- Rows 18-21: Forest + Reef ---
+    (0, 18): "forest", (5, 18): "reef", (6, 18): "reef", (7, 18): "reef", (8, 18): "reef", (9, 18): "floatingedge", (10, 18): "floatingedge",
+    (0, 19): "forest", (1, 19): "forest", (2, 19): "forest", (3, 19): "forest", (4, 19): "forest", (5, 19): "reef", (6, 19): "reef", (7, 19): "reef", (8, 19): "reef", (9, 19): "floatingedge", (10, 19): "floatingedge",
+    (0, 20): "forest", (1, 20): "forest", (2, 20): "forest", (3, 20): "forest", (4, 20): "forest", (5, 20): "reef", (6, 20): "reef", (7, 20): "reef", (8, 20): "reef", (9, 20): "floatingedge", (10, 20): "floatingedge",
+    (0, 21): "forest", (1, 21): "forest", (2, 21): "forest", (3, 21): "forest", (4, 21): "forest", (5, 21): "reef", (6, 21): "reef", (7, 21): "reef", (8, 21): "reef", (9, 21): "floatingedge", (10, 21): "floatingedge",
+    # --- Rows 22-25: Forest + Sea Object ---
+    (0, 22): "forest", (5, 22): "sea_object", (6, 22): "sea_object", (7, 22): "sea_object", (8, 22): "sea_object", (9, 22): "floatingedge", (10, 22): "floatingedge",
+    (0, 23): "forest", (1, 23): "forest", (2, 23): "forest", (3, 23): "forest", (4, 23): "forest", (5, 23): "sea_object", (6, 23): "sea_object", (7, 23): "sea_object", (8, 23): "sea_object", (9, 23): "floatingedge", (10, 23): "floatingedge",
+    (0, 24): "forest", (1, 24): "forest", (2, 24): "forest", (3, 24): "forest", (4, 24): "forest", (5, 24): "sea_object", (6, 24): "sea_object", (7, 24): "sea_object", (8, 24): "sea_object", (9, 24): "floatingedge", (10, 24): "floatingedge",
+    (0, 25): "forest", (1, 25): "forest", (2, 25): "forest", (3, 25): "forest", (4, 25): "forest", (5, 25): "sea_object", (6, 25): "sea_object", (7, 25): "sea_object", (8, 25): "sea_object", (9, 25): "floatingedge", (10, 25): "floatingedge",
+    # --- Row 26: Teleporter + Sea Object ---
+    (0, 26): "teleporter", (1, 26): "teleporter", (2, 26): "teleporter", (3, 26): "teleporter", (5, 26): "sea_object", (6, 26): "sea_object", (7, 26): "sea_object", (8, 26): "sea_object", (9, 26): "floatingedge", (10, 26): "floatingedge",
+    # --- Rows 27-28: Pipe, Campsite, Sea Object, Rail ---
+    (0, 27): "pipe", (1, 27): "pipe", (2, 27): "pipe", (3, 27): "pipe", (5, 27): "sea_object", (6, 27): "sea_object", (7, 27): "sea_object", (8, 27): "sea_object", (9, 27): "floatingedge", (10, 27): "floatingedge", (11, 27): "rail",
+    (0, 28): "campsite", (1, 28): "campsite", (2, 28): "campsite", (3, 28): "pipe", (5, 28): "rail", (6, 28): "rail", (7, 28): "rail", (8, 28): "rail", (9, 28): "rail", (10, 28): "rail", (11, 28): "rail",
+    # --- Rows 29-34: Pier, Rail, Computer, FloatingEdge, Water ---
+    (0, 29): "pier", (2, 29): "pier", (3, 29): "pier", (4, 29): "pier", (5, 29): "pier", (6, 29): "pier", (7, 29): "rail", (8, 29): "rail", (9, 29): "rail", (10, 29): "rail", (11, 29): "rail",
+    (1, 30): "pier", (2, 30): "pier", (3, 30): "pier", (4, 30): "pier", (5, 30): "pier", (6, 30): "pier", (7, 30): "pier", (8, 30): "pier", (9, 30): "pier", (10, 30): "rail", (11, 30): "rail",
+    (0, 31): "computer", (1, 31): "computer", (2, 31): "pier", (3, 31): "pier", (4, 31): "pier", (7, 31): "floatingedge", (8, 31): "floatingedge", (9, 31): "floatingedge", (10, 31): "floatingedge", (11, 31): "floatingedge",
+    (0, 32): "pier", (1, 32): "pier", (2, 32): "pier", (3, 32): "pier", (5, 32): "pier", (6, 32): "pier", (7, 32): "floatingedge", (9, 32): "floatingedge", (10, 32): "floatingedge", (11, 32): "floatingedge",
+    (0, 33): "pier", (5, 33): "pier", (6, 33): "pier", (7, 33): "floatingedge", (8, 33): "floatingedge", (9, 33): "floatingedge",
+    (0, 34): "pier", (2, 34): "pier", (3, 34): "pier", (4, 34): "pier", (5, 34): "pier", (6, 34): "pier", (7, 34): "water", (8, 34): "water", (9, 34): "water", (10, 34): "water", (11, 34): "water",
+    # --- Rows 35-48: Pier animation + Water (Sea/DeepSea) ---
+    (1, 35): "pier", (2, 35): "pier", (3, 35): "pier", (4, 35): "pier", (5, 35): "pier", (6, 35): "pier", (7, 35): "water", (8, 35): "water", (9, 35): "water", (10, 35): "water", (11, 35): "water",
+    (0, 36): "pier", (1, 36): "pier", (2, 36): "pier", (3, 36): "pier", (4, 36): "pier", (7, 36): "water", (8, 36): "water", (9, 36): "water",
+    (0, 37): "pier", (1, 37): "pier", (2, 37): "pier", (3, 37): "pier", (5, 37): "pier", (6, 37): "pier", (7, 37): "water", (8, 37): "water", (9, 37): "water", (10, 37): "water", (11, 37): "water",
+    (0, 38): "pier", (5, 38): "pier", (6, 38): "pier", (7, 38): "water", (8, 38): "water", (9, 38): "water", (10, 38): "water", (11, 38): "water",
+    (0, 39): "pier", (2, 39): "pier", (3, 39): "pier", (4, 39): "pier", (5, 39): "pier", (6, 39): "pier", (7, 39): "water", (8, 39): "water", (9, 39): "water",
+    (1, 40): "pier", (2, 40): "pier", (3, 40): "pier", (4, 40): "pier", (5, 40): "pier", (6, 40): "pier", (7, 40): "water", (8, 40): "water", (9, 40): "water", (10, 40): "water", (11, 40): "water",
+    (0, 41): "pier", (1, 41): "pier", (2, 41): "pier", (3, 41): "pier", (4, 41): "pier", (7, 41): "water", (8, 41): "water", (9, 41): "water", (10, 41): "water", (11, 41): "water",
+    (0, 42): "pier", (1, 42): "pier", (2, 42): "pier", (3, 42): "pier", (5, 42): "pier", (6, 42): "pier", (7, 42): "water", (8, 42): "water", (9, 42): "water",
+    (0, 43): "pier", (5, 43): "pier", (6, 43): "pier", (7, 43): "water", (8, 43): "water", (9, 43): "water", (10, 43): "water", (11, 43): "water",
+    (0, 44): "pier", (2, 44): "pier", (3, 44): "pier", (4, 44): "pier", (5, 44): "pier", (6, 44): "pier", (7, 44): "water", (8, 44): "water", (9, 44): "water", (10, 44): "water", (11, 44): "water",
+    (1, 45): "pier", (2, 45): "pier", (3, 45): "pier", (4, 45): "pier", (5, 45): "pier", (6, 45): "pier", (7, 45): "water", (8, 45): "water", (9, 45): "water",
+    (0, 46): "pier", (1, 46): "pier", (2, 46): "pier", (3, 46): "pier", (4, 46): "pier", (7, 46): "water", (8, 46): "water", (9, 46): "water", (10, 46): "water", (11, 46): "water",
+    (0, 47): "pier", (1, 47): "pier", (2, 47): "pier", (3, 47): "pier", (5, 47): "pier", (6, 47): "pier", (7, 47): "water", (8, 47): "water", (9, 47): "water", (10, 47): "water", (11, 47): "water",
+    (0, 48): "pier", (5, 48): "pier", (6, 48): "pier", (7, 48): "water", (8, 48): "water", (9, 48): "water",
+    # --- Rows 49-72: Water (Beach + Deep Sea) ---
+    # FloatingWaterEdge at r58-65 c7-10
+    (0, 49): "water", (1, 49): "water", (2, 49): "water", (3, 49): "water", (4, 49): "water", (5, 49): "water", (6, 49): "water", (7, 49): "water", (8, 49): "water", (9, 49): "water", (10, 49): "water", (11, 49): "water",
+    (0, 50): "water", (1, 50): "water", (2, 50): "water", (3, 50): "water", (4, 50): "water", (5, 50): "water", (6, 50): "water", (7, 50): "water", (8, 50): "water", (9, 50): "water", (10, 50): "water", (11, 50): "water",
+    (0, 51): "water", (1, 51): "water", (2, 51): "water", (3, 51): "water", (4, 51): "water", (5, 51): "water", (6, 51): "water", (7, 51): "water", (8, 51): "water", (9, 51): "water",
+    (0, 52): "water", (1, 52): "water", (2, 52): "water", (3, 52): "water", (4, 52): "water", (5, 52): "water", (6, 52): "water", (7, 52): "water", (8, 52): "water", (9, 52): "water", (10, 52): "water", (11, 52): "water",
+    (0, 53): "water", (1, 53): "water", (2, 53): "water", (3, 53): "water", (4, 53): "water", (5, 53): "water", (6, 53): "water", (7, 53): "water", (8, 53): "water", (9, 53): "water", (10, 53): "water", (11, 53): "water",
+    (0, 54): "water", (1, 54): "water", (2, 54): "water", (3, 54): "water", (4, 54): "water", (5, 54): "water", (6, 54): "water", (7, 54): "water", (8, 54): "water", (9, 54): "water",
+    (0, 55): "water", (1, 55): "water", (2, 55): "water", (3, 55): "water", (4, 55): "water", (5, 55): "water", (6, 55): "water", (7, 55): "water", (8, 55): "water", (9, 55): "water", (10, 55): "water", (11, 55): "water",
+    (0, 56): "water", (1, 56): "water", (2, 56): "water", (3, 56): "water", (4, 56): "water", (5, 56): "water", (6, 56): "water", (7, 56): "water", (8, 56): "water", (9, 56): "water", (10, 56): "water", (11, 56): "water",
+    (0, 57): "water", (1, 57): "water", (2, 57): "water", (3, 57): "water", (4, 57): "water", (5, 57): "water", (6, 57): "water", (7, 57): "water", (8, 57): "water", (9, 57): "water",
+    (0, 58): "water", (1, 58): "water", (2, 58): "water", (3, 58): "water", (4, 58): "water", (5, 58): "water", (6, 58): "water", (7, 58): "floatingedge", (8, 58): "floatingedge", (9, 58): "floatingedge", (10, 58): "floatingedge",
+    (0, 59): "water", (1, 59): "water", (2, 59): "water", (3, 59): "water", (4, 59): "water", (5, 59): "water", (6, 59): "water", (7, 59): "floatingedge", (8, 59): "floatingedge", (9, 59): "floatingedge", (10, 59): "floatingedge",
+    (0, 60): "water", (1, 60): "water", (2, 60): "water", (3, 60): "water", (4, 60): "water", (5, 60): "water", (6, 60): "water", (7, 60): "floatingedge", (8, 60): "floatingedge", (9, 60): "floatingedge", (10, 60): "floatingedge",
+    (0, 61): "water", (1, 61): "water", (2, 61): "water", (3, 61): "water", (4, 61): "water", (5, 61): "water", (6, 61): "water", (7, 61): "floatingedge", (8, 61): "floatingedge", (9, 61): "floatingedge", (10, 61): "floatingedge",
+    (0, 62): "water", (1, 62): "water", (2, 62): "water", (3, 62): "water", (4, 62): "water", (5, 62): "water", (6, 62): "water", (7, 62): "floatingedge", (8, 62): "floatingedge", (9, 62): "floatingedge", (10, 62): "floatingedge",
+    (0, 63): "water", (1, 63): "water", (2, 63): "water", (3, 63): "water", (4, 63): "water", (5, 63): "water", (6, 63): "water", (7, 63): "floatingedge", (8, 63): "floatingedge", (9, 63): "floatingedge", (10, 63): "floatingedge",
+    (0, 64): "water", (1, 64): "water", (2, 64): "water", (3, 64): "water", (4, 64): "water", (5, 64): "water", (6, 64): "water", (7, 64): "floatingedge", (8, 64): "floatingedge", (9, 64): "floatingedge", (10, 64): "floatingedge",
+    (0, 65): "water", (1, 65): "water", (2, 65): "water", (3, 65): "water", (4, 65): "water", (5, 65): "water", (6, 65): "water", (7, 65): "floatingedge", (8, 65): "floatingedge", (9, 65): "floatingedge", (10, 65): "floatingedge",
+    (0, 66): "water", (1, 66): "water", (2, 66): "water", (3, 66): "water", (4, 66): "water", (5, 66): "water", (6, 66): "water",
+    (0, 67): "water", (1, 67): "water", (2, 67): "water", (3, 67): "water", (4, 67): "water", (5, 67): "water", (6, 67): "water",
+    (0, 68): "water", (1, 68): "water", (2, 68): "water", (3, 68): "water", (4, 68): "water", (5, 68): "water", (6, 68): "water",
+    (0, 69): "water", (1, 69): "water", (2, 69): "water", (3, 69): "water", (4, 69): "water", (5, 69): "water", (6, 69): "water",
+    (0, 70): "water", (1, 70): "water", (2, 70): "water", (3, 70): "water", (4, 70): "water", (5, 70): "water", (6, 70): "water",
+    (0, 71): "water", (1, 71): "water", (2, 71): "water", (3, 71): "water", (4, 71): "water", (5, 71): "water", (6, 71): "water",
+    (0, 72): "water", (1, 72): "water", (2, 72): "water", (3, 72): "water", (4, 72): "water", (5, 72): "water", (6, 72): "water",
+    # --- Rows 73-144: River (repeating 3-row pattern) ---
+    # Pattern per 3-row group (base, base+1, base+2):
+    #   base+0: c0-4=river, c6=water(sea anim), c9=floatingedge
+    #   base+1: c0,c2-4=river, c5=water, c7=water, c8=floatingedge, c10=floatingedge
+    #   base+2: c0-3=river, c6=water, c9=floatingedge
+    **{
+        (col, row): typ
+        for base in range(73, 145, 3)
+        for row, col_types in [
+            (base, [(c, "river") for c in range(0, 5)]
+                 + [(6, "water"), (9, "floatingedge")]),
+            (base + 1, [(0, "river")] + [(c, "river") for c in range(2, 5)]
+                     + [(5, "water"), (7, "water"), (8, "floatingedge"), (10, "floatingedge")]),
+            (base + 2, [(c, "river") for c in range(0, 4)]
+                     + [(6, "water"), (9, "floatingedge")]),
+        ]
+        if row <= 144
+        for col, typ in col_types
+    },
+}
+
+# Sub-types that batch with a parent type during AI reskinning.
+# Types not listed here batch under their own name.
+TYPE_BATCH_MAPPING: dict[str, str] = {
+    "reef": "water",
+    "sea_object": "water",
+    "trench": "street",
+    "bridge": "street",
+    "rail": "street",
+    "pipe": "street",
+    "lightning": "plain",
+    "computer": "street",
 }
 
 # Type-specific prompt hints
@@ -141,6 +254,15 @@ TILE_TYPE_HINTS = {
         "water color and flow pattern IDENTICAL to the sea tiles. River "
         "banks must match the plain grass tone. All river tiles must blend "
         "seamlessly when connected."
+    ),
+    "stormcloud": (
+        "These are atmospheric STORM CLOUD and WEATHER EFFECT tiles. They should "
+        "look like dramatic clouds with lightning, rain, or storm effects. Use "
+        "cool grays, dark blues, and white highlights."
+    ),
+    "teleporter": (
+        "These are TELEPORTER PAD tiles. They are sci-fi/magical portal platforms. "
+        "Maintain their distinctive glow and energy effects."
     ),
 }
 
@@ -209,12 +331,12 @@ def download_atlas(atlas_name: str, work_dir: Path) -> Path:
     return dest
 
 
-def classify_cell(row: int) -> str:
-    """Classify a cell by its row into a tile type group."""
-    for name, (rmin, rmax) in TILE_TYPE_ROWS.items():
-        if rmin <= row <= rmax:
-            return name
-    return "water"  # rows beyond 144 (rare) go to water
+def classify_cell(col: int, row: int) -> str | None:
+    """Classify a cell by its (col, row) position into a tile type group.
+
+    Returns None if the cell is not in TILE_CELL_MAP.
+    """
+    return TILE_CELL_MAP.get((col, row))
 
 
 # Pre-compute non-base animation frame positions for fast lookup.
@@ -519,6 +641,13 @@ def extract_cells(atlas_path: Path, work_dir: Path) -> list[dict]:
             cell_path = cells_dir / f"{cell_id}.png"
             cell.save(cell_path)
 
+            cell_type = classify_cell(col, row)
+            if cell_type is None:
+                raise ValueError(
+                    f"Cell (col={col}, row={row}) is occupied but has no type mapping in TILE_CELL_MAP. "
+                    f"Update TILE_CELL_MAP to include this cell."
+                )
+
             cells.append({
                 "id": cell_id,
                 "row": row,
@@ -526,7 +655,7 @@ def extract_cells(atlas_path: Path, work_dir: Path) -> list[dict]:
                 "x": x,
                 "y": y,
                 "path": str(cell_path),
-                "type": classify_cell(row),
+                "type": cell_type,
                 "is_anim_frame": is_animation_frame(col, row),
             })
 
@@ -562,7 +691,9 @@ def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
 
     by_type = defaultdict(list)
     for c in batchable:
-        by_type[c["type"]].append(c)
+        # Map sub-types to their parent batch type
+        batch_type = TYPE_BATCH_MAPPING.get(c["type"], c["type"])
+        by_type[batch_type].append(c)
 
     cell_w = TILE_SIZE + CELL_PADDING * 2
     cell_h = TILE_SIZE + CELL_PADDING * 2
@@ -667,7 +798,8 @@ def generate_anchors(
     client = genai.Client(api_key=api_key)
 
     terrain_order = ["plain", "street", "mountain", "forest",
-                     "campsite", "pier", "water", "river"]
+                     "campsite", "pier", "water", "river",
+                     "stormcloud", "teleporter"]
 
     # Pick one representative non-animation-frame cell per terrain type
     representatives = {}
@@ -1596,7 +1728,8 @@ def _reskin_batches(
                     plain_anchor = anchor_paths.get("plain")
                     water_anchor = anchor_paths.get("water")
                     if tile_type in ("water", "river"):
-                        # Water/river: add plain anchor for grass in coastlines/banks
+                        # Water/river (+ reef, sea_object via batching):
+                        # add plain anchor for grass in coastlines/banks
                         if plain_anchor and plain_anchor != type_anchor:
                             batch_anchor_paths.append(plain_anchor)
                     elif tile_type == "pier":
@@ -1605,8 +1738,9 @@ def _reskin_batches(
                             batch_anchor_paths.append(water_anchor)
                         if plain_anchor and plain_anchor != type_anchor:
                             batch_anchor_paths.append(plain_anchor)
-                    elif tile_type in ("mountain", "forest", "campsite"):
-                        # Mountain/forest/campsite: add plain anchor for grass background
+                    elif tile_type in ("street", "mountain", "forest", "campsite"):
+                        # Street (+ trench, bridge, rail, pipe via batching),
+                        # Mountain, Forest, Campsite: add plain anchor for grass
                         if plain_anchor and plain_anchor != type_anchor:
                             batch_anchor_paths.append(plain_anchor)
             reskinned_img = reskin_batch_gemini(
@@ -1679,7 +1813,7 @@ def _download_and_extract(args, work_dir: Path):
     if cells_manifest.exists() and (work_dir / "cells").exists():
         cached = json.loads(cells_manifest.read_text())
         if cached and "type" in cached[0]:
-            first_type = classify_cell(cached[0]["row"])
+            first_type = classify_cell(cached[0]["col"], cached[0]["row"])
             if cached[0]["type"] == first_type:
                 print("  Using cached cells manifest")
                 cells = cached
@@ -1808,6 +1942,7 @@ def main():
             for ttype in [
                 "plain", "street", "mountain", "forest",
                 "campsite", "pier", "water", "river",
+                "stormcloud", "teleporter",
             ]:
                 anchor_file = work_dir / f"anchor_{ttype}.png"
                 if anchor_file.exists():

@@ -30,7 +30,7 @@ def _make_cell(col, row, cell_id=None, cell_type=None, tmp_path=None,
     """Create a minimal cell dict with a real 24x24 PNG."""
     cid = cell_id or f"r{row:03d}_c{col:02d}"
     x, y = col * 24, row * 24
-    t = cell_type or reskin_tiles.classify_cell(row)
+    t = cell_type or reskin_tiles.classify_cell(col, row) or "plain"
 
     if tmp_path is not None:
         img = Image.new("RGBA", (24, 24), (100, 150, 200, 255))
@@ -59,42 +59,108 @@ def _make_cell(col, row, cell_id=None, cell_type=None, tmp_path=None,
 # ---------------------------------------------------------------------------
 
 class TestClassifyCell:
-    def test_plain_rows(self):
-        assert reskin_tiles.classify_cell(0) == "plain"
-        assert reskin_tiles.classify_cell(2) == "plain"
+    """Tests for per-cell classification via TILE_CELL_MAP lookup."""
 
-    def test_street_rows(self):
-        assert reskin_tiles.classify_cell(3) == "street"
-        assert reskin_tiles.classify_cell(6) == "street"
+    def test_plain_cells(self):
+        assert reskin_tiles.classify_cell(0, 0) == "plain"
+        assert reskin_tiles.classify_cell(2, 2) == "plain"
+        assert reskin_tiles.classify_cell(4, 1) == "plain"
 
-    def test_mountain_rows(self):
-        assert reskin_tiles.classify_cell(7) == "mountain"
-        assert reskin_tiles.classify_cell(18) == "mountain"
+    def test_street_cells(self):
+        assert reskin_tiles.classify_cell(3, 3) == "street"
+        assert reskin_tiles.classify_cell(0, 5) == "street"
+        # Row 6 cols 3-4 are street (boundary)
+        assert reskin_tiles.classify_cell(3, 6) == "street"
 
-    def test_forest_rows(self):
-        assert reskin_tiles.classify_cell(19) == "forest"
-        assert reskin_tiles.classify_cell(26) == "forest"
+    def test_mountain_cells(self):
+        assert reskin_tiles.classify_cell(3, 7) == "mountain"
+        assert reskin_tiles.classify_cell(0, 12) == "mountain"
 
-    def test_campsite_rows(self):
-        assert reskin_tiles.classify_cell(27) == "campsite"
-        assert reskin_tiles.classify_cell(28) == "campsite"
+    def test_forest_cells(self):
+        assert reskin_tiles.classify_cell(0, 19) == "forest"
+        assert reskin_tiles.classify_cell(4, 25) == "forest"
 
-    def test_pier_rows(self):
-        assert reskin_tiles.classify_cell(29) == "pier"
-        assert reskin_tiles.classify_cell(34) == "pier"
+    def test_campsite_cells(self):
+        assert reskin_tiles.classify_cell(0, 28) == "campsite"
+        assert reskin_tiles.classify_cell(2, 28) == "campsite"
 
-    def test_water_rows_include_sea_and_beach(self):
-        """Water type covers sea (35-58) and beach frames (59-72)."""
-        assert reskin_tiles.classify_cell(35) == "water"
-        assert reskin_tiles.classify_cell(50) == "water"
-        assert reskin_tiles.classify_cell(62) == "water"
-        assert reskin_tiles.classify_cell(68) == "water"
-        assert reskin_tiles.classify_cell(72) == "water"
+    def test_pier_cells(self):
+        assert reskin_tiles.classify_cell(0, 29) == "pier"
+        assert reskin_tiles.classify_cell(0, 34) == "pier"
 
-    def test_river_rows(self):
-        assert reskin_tiles.classify_cell(73) == "river"
-        assert reskin_tiles.classify_cell(100) == "river"
-        assert reskin_tiles.classify_cell(144) == "river"
+    def test_water_cells_include_sea_and_beach(self):
+        """Water type covers sea (rows 34-58 cols 7-11) and beach (rows 49-72)."""
+        assert reskin_tiles.classify_cell(7, 34) == "water"
+        assert reskin_tiles.classify_cell(0, 50) == "water"
+        assert reskin_tiles.classify_cell(0, 62) == "water"
+        assert reskin_tiles.classify_cell(0, 68) == "water"
+        assert reskin_tiles.classify_cell(0, 72) == "water"
+
+    def test_river_cells(self):
+        assert reskin_tiles.classify_cell(0, 73) == "river"
+        assert reskin_tiles.classify_cell(0, 100) == "river"
+        assert reskin_tiles.classify_cell(0, 144) == "river"
+
+    def test_stormcloud_cells(self):
+        """StormCloud cells (cols 5-8, rows 6-17) classified as stormcloud, NOT mountain."""
+        assert reskin_tiles.classify_cell(5, 7) == "stormcloud"
+        assert reskin_tiles.classify_cell(6, 7) == "stormcloud"
+        assert reskin_tiles.classify_cell(8, 10) == "stormcloud"
+
+    def test_reef_cells(self):
+        """Reef cells classified as reef, NOT forest."""
+        assert reskin_tiles.classify_cell(5, 18) == "reef"
+        assert reskin_tiles.classify_cell(6, 19) == "reef"
+        assert reskin_tiles.classify_cell(8, 21) == "reef"
+
+    def test_sea_object_cells(self):
+        """Iceberg/Weeds/Island/GasBubbles classified as sea_object, NOT forest."""
+        assert reskin_tiles.classify_cell(5, 22) == "sea_object"
+        assert reskin_tiles.classify_cell(6, 23) == "sea_object"
+        assert reskin_tiles.classify_cell(5, 26) == "sea_object"
+
+    def test_trench_cells(self):
+        """Trench cells classified as trench, NOT mountain."""
+        assert reskin_tiles.classify_cell(0, 15) == "trench"
+        assert reskin_tiles.classify_cell(1, 16) == "trench"
+
+    def test_bridge_cells(self):
+        assert reskin_tiles.classify_cell(8, 1) == "bridge"
+        assert reskin_tiles.classify_cell(8, 4) == "bridge"
+
+    def test_rail_cells(self):
+        assert reskin_tiles.classify_cell(5, 0) == "rail"
+        assert reskin_tiles.classify_cell(10, 28) == "rail"
+
+    def test_teleporter_cells(self):
+        assert reskin_tiles.classify_cell(0, 26) == "teleporter"
+        assert reskin_tiles.classify_cell(3, 26) == "teleporter"
+
+    def test_computer_cells(self):
+        assert reskin_tiles.classify_cell(0, 31) == "computer"
+        assert reskin_tiles.classify_cell(1, 31) == "computer"
+
+    def test_lightning_cells(self):
+        assert reskin_tiles.classify_cell(10, 0) == "lightning"
+        assert reskin_tiles.classify_cell(10, 6) == "lightning"
+
+    def test_pipe_cells(self):
+        assert reskin_tiles.classify_cell(0, 27) == "pipe"
+        assert reskin_tiles.classify_cell(3, 28) == "pipe"
+
+    def test_floatingedge_cells(self):
+        assert reskin_tiles.classify_cell(9, 12) == "floatingedge"
+        assert reskin_tiles.classify_cell(10, 20) == "floatingedge"
+
+    def test_unmapped_returns_none(self):
+        """Cells not in the map return None."""
+        assert reskin_tiles.classify_cell(99, 99) is None
+        assert reskin_tiles.classify_cell(4, 0) is None  # c4 r0 is not occupied
+        assert reskin_tiles.classify_cell(0, 145) is None  # beyond atlas rows
+
+    def test_tile_cell_map_completeness(self):
+        """TILE_CELL_MAP should have 1226 entries matching all Tiles0 occupied cells."""
+        assert len(reskin_tiles.TILE_CELL_MAP) == 1226
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +251,7 @@ class TestIsAnimationFrame:
 
 class TestCreateTypedBatches:
     def test_cells_grouped_by_type(self, tmp_path):
-        """Cells of the same type end up in the same batch."""
+        """Cells of the same batch type end up in the same batch."""
         cells = [
             _make_cell(0, 0, tmp_path=tmp_path),   # plain
             _make_cell(1, 0, tmp_path=tmp_path),   # plain
@@ -198,9 +264,19 @@ class TestCreateTypedBatches:
         assert "plain" in types
         assert "water" in types
 
-        for b in batches:
-            cell_types = {c["type"] for c in b["cells"]}
-            assert len(cell_types) == 1  # all cells in a batch are same type
+    def test_subtypes_batch_with_parent(self, tmp_path):
+        """Sub-types batch with their parent via TYPE_BATCH_MAPPING."""
+        cells = [
+            _make_cell(0, 3, tmp_path=tmp_path, cell_type="street", is_anim_frame=False),
+            _make_cell(0, 15, tmp_path=tmp_path, cell_type="trench", is_anim_frame=False),
+            _make_cell(8, 1, tmp_path=tmp_path, cell_type="bridge", is_anim_frame=False),
+        ]
+        batches = reskin_tiles.create_typed_batches(cells, tmp_path)
+
+        # trench and bridge batch with street -> only 1 batch
+        assert len(batches) == 1
+        assert batches[0]["tile_type"] == "street"
+        assert len(batches[0]["cells"]) == 3
 
     def test_batch_size_limit(self, tmp_path):
         """Batches should not exceed CELLS_PER_BATCH (36)."""
@@ -269,8 +345,8 @@ class TestCreateTypedBatches:
         cells = [
             _make_cell(0, 0, tmp_path=tmp_path, is_anim_frame=False),   # plain, included
             _make_cell(1, 0, tmp_path=tmp_path, is_anim_frame=False),   # plain, included
-            _make_cell(0, 38, tmp_path=tmp_path, is_anim_frame=True),   # Sea frame row, excluded
-            _make_cell(0, 35, tmp_path=tmp_path, is_anim_frame=False),  # Sea base, included
+            _make_cell(8, 38, tmp_path=tmp_path, is_anim_frame=True),   # water frame, excluded
+            _make_cell(8, 35, tmp_path=tmp_path, is_anim_frame=False),  # water base, included
         ]
         batches = reskin_tiles.create_typed_batches(cells, tmp_path)
 
@@ -281,15 +357,15 @@ class TestCreateTypedBatches:
         batch_ids = {c["id"] for c in all_batch_cells}
         assert "r000_c00" in batch_ids  # plain cell included
         assert "r000_c01" in batch_ids  # plain cell included
-        assert "r035_c00" in batch_ids  # Sea base included
-        assert "r038_c00" not in batch_ids  # animation frame excluded
+        assert "r035_c08" in batch_ids  # water base included
+        assert "r038_c08" not in batch_ids  # animation frame excluded
         assert len(all_batch_cells) == 3
 
     def test_all_anim_frames_excluded_yields_no_batches(self, tmp_path):
         """If all cells are animation frames, no batches should be created."""
         cells = [
-            _make_cell(0, 38, tmp_path=tmp_path, is_anim_frame=True),
-            _make_cell(1, 38, tmp_path=tmp_path, is_anim_frame=True),
+            _make_cell(8, 38, tmp_path=tmp_path, is_anim_frame=True),
+            _make_cell(9, 38, tmp_path=tmp_path, is_anim_frame=True),
         ]
         batches = reskin_tiles.create_typed_batches(cells, tmp_path)
         assert len(batches) == 0
