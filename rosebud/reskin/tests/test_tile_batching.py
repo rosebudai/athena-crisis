@@ -42,6 +42,12 @@ def _make_cell(col, row, cell_id=None, cell_type=None, tmp_path=None,
 
     anim = is_anim_frame if is_anim_frame is not None else reskin_tiles.is_animation_frame(col, row)
 
+    # Tag animation metadata
+    anim_info = reskin_tiles.get_anim_cell_info(col, row)
+    anim_name = anim_info[0] if anim_info else None
+    anim_frame_idx = anim_info[1] if anim_info else None
+    anim_cell_idx = anim_info[2] if anim_info else None
+
     return {
         "id": cid,
         "row": row,
@@ -51,6 +57,9 @@ def _make_cell(col, row, cell_id=None, cell_type=None, tmp_path=None,
         "path": path_str,
         "type": t,
         "is_anim_frame": anim,
+        "anim_name": anim_name,
+        "anim_frame_idx": anim_frame_idx,
+        "anim_cell_idx": anim_cell_idx,
     }
 
 
@@ -249,12 +258,16 @@ class TestIsAnimationFrame:
 
 class TestCreateTypedBatches:
     def test_cells_grouped_by_type(self, tmp_path):
-        """Cells of the same batch type end up in the same batch."""
+        """Cells of the same batch type end up in the same batch.
+
+        Note: Animation cells (including base frames) are now excluded from
+        type batches.  Use non-animated water cells for this test.
+        """
         cells = [
             _make_cell(0, 0, tmp_path=tmp_path),   # plain
             _make_cell(1, 0, tmp_path=tmp_path),   # plain
-            _make_cell(8, 35, tmp_path=tmp_path),  # water (Sea base, col 8)
-            _make_cell(9, 35, tmp_path=tmp_path),  # water (Sea base, col 9)
+            _make_cell(6, 73, tmp_path=tmp_path),   # water (non-animated, in river row range)
+            _make_cell(6, 76, tmp_path=tmp_path),   # water (non-animated, in river row range)
         ]
         batches = reskin_tiles.create_typed_batches(cells, tmp_path)
 
@@ -304,9 +317,10 @@ class TestCreateTypedBatches:
         """Batches should not exceed CELLS_PER_BATCH (36)."""
         # Create 40 plain cells, explicitly non-animated for batching tests
         cells = [_make_cell(i % 12, i // 12, tmp_path=tmp_path, is_anim_frame=False) for i in range(40)]
-        # Force all to plain type
+        # Force all to plain type and clear animation metadata
         for c in cells:
             c["type"] = "plain"
+            c["anim_name"] = None
 
         batches = reskin_tiles.create_typed_batches(cells, tmp_path)
 
@@ -316,8 +330,10 @@ class TestCreateTypedBatches:
     def test_batch_overflow_creates_multiple(self, tmp_path):
         """More than 36 cells of one type should create multiple batches."""
         cells = [_make_cell(i % 12, i // 12, tmp_path=tmp_path, is_anim_frame=False) for i in range(40)]
+        # Force all to plain type and clear animation metadata
         for c in cells:
             c["type"] = "plain"
+            c["anim_name"] = None
 
         batches = reskin_tiles.create_typed_batches(cells, tmp_path)
         plain_batches = [b for b in batches if b["tile_type"] == "plain"]
@@ -354,6 +370,7 @@ class TestCreateTypedBatches:
         cells = [_make_cell(i % 12, i // 12, tmp_path=tmp_path, is_anim_frame=False) for i in range(10)]
         for c in cells:
             c["type"] = "plain"
+            c["anim_name"] = None
 
         batches = reskin_tiles.create_typed_batches(cells, tmp_path)
         b = batches[0]
@@ -362,13 +379,16 @@ class TestCreateTypedBatches:
             assert 0 <= c["grid_col"] < reskin_tiles.GRID_COLS
             assert 0 <= c["grid_row"]
 
-    def test_animation_frames_excluded(self, tmp_path):
-        """Cells marked as animation frames should be excluded from batches."""
+    def test_animation_cells_excluded(self, tmp_path):
+        """ALL animation cells (base + frames) should be excluded from type batches.
+
+        Animation cells are now handled by build_animation_batches() instead.
+        """
         cells = [
             _make_cell(0, 0, tmp_path=tmp_path, is_anim_frame=False),   # plain, included
             _make_cell(1, 0, tmp_path=tmp_path, is_anim_frame=False),   # plain, included
             _make_cell(8, 38, tmp_path=tmp_path, is_anim_frame=True),   # water frame, excluded
-            _make_cell(8, 35, tmp_path=tmp_path, is_anim_frame=False),  # water base, included
+            _make_cell(8, 35, tmp_path=tmp_path, is_anim_frame=False),  # water base (Sea anim), excluded
         ]
         batches = reskin_tiles.create_typed_batches(cells, tmp_path)
 
@@ -379,9 +399,9 @@ class TestCreateTypedBatches:
         batch_ids = {c["id"] for c in all_batch_cells}
         assert "r000_c00" in batch_ids  # plain cell included
         assert "r000_c01" in batch_ids  # plain cell included
-        assert "r035_c08" in batch_ids  # water base included
+        assert "r035_c08" not in batch_ids  # water base excluded (Sea animation)
         assert "r038_c08" not in batch_ids  # animation frame excluded
-        assert len(all_batch_cells) == 3
+        assert len(all_batch_cells) == 2
 
     def test_all_anim_frames_excluded_yields_no_batches(self, tmp_path):
         """If all cells are animation frames, no batches should be created."""

@@ -465,6 +465,21 @@ MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE = (
     "6) Use the reference grass/land colors for any land portions."
 )
 
+ANIM_BATCH_PROMPT_TEMPLATE = (
+    "{style_sheet_instruction}"
+    "Reskin the animation frames in the last image to match the visual style of the anchor tile. "
+    "Each column in the grid represents the next frame of a looping animation. "
+    "CRITICAL: Preserve the motion differences between frames — each frame should have the same "
+    "reskinned style but maintain its unique position/shape changes that create the animation. "
+    "Rules:\n"
+    "1) Each column is one animation frame. Reskin all frames identically in style.\n"
+    "2) Preserve frame-to-frame differences (position shifts, shape changes, opacity variations).\n"
+    "3) Maintain exact transparency — do not fill transparent areas.\n"
+    "4) Match the anchor tile's palette and shading.\n"
+    "5) Keep the same grid layout — same number of rows and columns.\n"
+    "{cell_legend}"
+)
+
 
 def download_atlas(atlas_name: str, work_dir: Path) -> Path:
     """Download the original atlas from CDN."""
@@ -747,6 +762,55 @@ def _init_anim_frame_set_conservative():
                         for i in range(1, frames):
                             anim_frames.add((col, src_row + i * offset))
     _anim_frame_set = anim_frames
+    # Also build the animation cell map for metadata tagging
+    _build_anim_cell_map_conservative()
+
+
+# Pre-computed mapping: (col, row) -> (anim_name, frame_idx, cell_idx)
+# Built by _build_anim_cell_map() for ALL animation cells (base + non-base).
+_anim_cell_map: dict[tuple[int, int], tuple[str, int, int]] | None = None
+
+
+def _build_anim_cell_map_conservative() -> dict[tuple[int, int], tuple[str, int, int]]:
+    """Build animation cell metadata map using estimated column ranges.
+
+    Returns a dict mapping (col, row) -> (anim_name, frame_idx, cell_idx)
+    for ALL animation cells (base frame + non-base frames).
+    Used by tests that don't have a real atlas available.
+    """
+    global _anim_cell_map
+    result: dict[tuple[int, int], tuple[str, int, int]] = {}
+    for entry in ANIMATED_TILES:
+        name, base_col, base_row, frames, offset, horizontal, block_start_delta = entry
+        min_x, max_x = _ANIM_COL_OFFSETS.get(name, (-3, 6))
+        if horizontal:
+            for i in range(frames):
+                pos = (base_col + i * offset, base_row)
+                if pos not in result:
+                    result[pos] = (name, i, 0)
+        else:
+            block_start = base_row + block_start_delta
+            for i in range(frames):
+                cell_idx = 0
+                for row_delta in range(abs(offset)):
+                    src_row = block_start + row_delta + i * offset
+                    for col_offset in range(min_x, max_x + 1):
+                        col = base_col + col_offset
+                        if 0 <= col < ATLAS_COLS:
+                            pos = (col, src_row)
+                            if pos not in result:
+                                result[pos] = (name, i, cell_idx)
+                            cell_idx += 1
+    _anim_cell_map = result
+    return result
+
+
+def get_anim_cell_info(col: int, row: int) -> tuple[str, int, int] | None:
+    """Return (anim_name, frame_idx, cell_idx) for an animation cell, or None."""
+    global _anim_cell_map
+    if _anim_cell_map is None:
+        return None
+    return _anim_cell_map.get((col, row))
 
 
 def is_animation_frame(col: int, row: int) -> bool:
@@ -766,13 +830,15 @@ def is_animation_frame(col: int, row: int) -> bool:
 
 def extract_cells(atlas_path: Path, work_dir: Path) -> list[dict]:
     """Split atlas into individual cells, skipping fully transparent ones."""
-    global _anim_frame_set
+    global _anim_frame_set, _anim_cell_map
     img = Image.open(atlas_path).convert("RGBA")
     w, h = img.size
     rows = h // TILE_SIZE
 
     # Compute animation frame set from actual atlas data
     _anim_frame_set = compute_anim_frame_set(img)
+    # Also build the animation cell map for metadata tagging
+    _build_anim_cell_map_conservative()
 
     cells_dir = work_dir / "cells"
     cells_dir.mkdir(exist_ok=True)
@@ -799,6 +865,12 @@ def extract_cells(atlas_path: Path, work_dir: Path) -> list[dict]:
                     f"Update TILE_CELL_MAP to include this cell."
                 )
 
+            # Tag animation metadata
+            anim_info = get_anim_cell_info(col, row)
+            anim_name = anim_info[0] if anim_info else None
+            anim_frame_idx = anim_info[1] if anim_info else None
+            anim_cell_idx = anim_info[2] if anim_info else None
+
             cells.append({
                 "id": cell_id,
                 "row": row,
@@ -808,6 +880,9 @@ def extract_cells(atlas_path: Path, work_dir: Path) -> list[dict]:
                 "path": str(cell_path),
                 "type": cell_type,
                 "is_anim_frame": is_animation_frame(col, row),
+                "anim_name": anim_name,
+                "anim_frame_idx": anim_frame_idx,
+                "anim_cell_idx": anim_cell_idx,
             })
 
     anim_count = sum(1 for c in cells if c["is_anim_frame"])
@@ -825,20 +900,21 @@ def extract_cells(atlas_path: Path, work_dir: Path) -> list[dict]:
 def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
     """Group cells by terrain type, then batch into 6x6 grids.
 
-    Animation frame cells (is_anim_frame=True) are excluded from batching.
-    They will be filled in later by copy_base_frames_to_anim_frames().
+    ALL animation cells (base + non-base frames) are excluded from type
+    batching.  They are handled separately by build_animation_batches().
     """
     batches_dir = work_dir / "batches"
     batches_dir.mkdir(exist_ok=True)
-    # Clean old batch files
+    # Clean old batch files — only type batch files, preserve anim_ files
     for f in batches_dir.iterdir():
-        f.unlink()
+        if not f.name.startswith("anim_"):
+            f.unlink()
 
-    # Filter out animation frame cells — only base frames go to AI
-    excluded = sum(1 for c in cells if c.get("is_anim_frame"))
-    batchable = [c for c in cells if not c.get("is_anim_frame")]
+    # Filter out ALL animation cells (base + non-base) — they go to animation batches
+    excluded = sum(1 for c in cells if c.get("anim_name") is not None or c.get("is_anim_frame"))
+    batchable = [c for c in cells if c.get("anim_name") is None and not c.get("is_anim_frame")]
     if excluded:
-        print(f"  Excluded {excluded} animation frame cells from batching")
+        print(f"  Excluded {excluded} animation cells from type batching (handled by animation batches)")
 
     by_type = defaultdict(list)
     for c in batchable:
@@ -922,6 +998,164 @@ def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
     print(f"  Created {len(batches)} batches grouped by type:")
     for t in sorted(type_batch_counts.keys()):
         print(f"    {t}: {type_batch_counts[t]} batches")
+
+    return batches
+
+
+def build_animation_batches(cells: list[dict], work_dir: Path) -> list[dict]:
+    """Build animation-specific batches with frames laid out as columns.
+
+    For each animation in ANIMATED_TILES, collects all frame cells from the
+    cells list and arranges them into a grid where columns = frames and
+    rows = cells within one frame.
+
+    Large animations (>6 frames) are sub-batched into groups of 6 frames,
+    with frame 0 included as a reference column in each sub-batch.
+
+    Parameters
+    ----------
+    cells : list[dict]
+        All extracted cells (from extract_cells).
+    work_dir : Path
+        Working directory for saving batch grid images.
+
+    Returns
+    -------
+    list[dict]
+        List of batch metadata dicts with animation-specific fields.
+    """
+    batches_dir = work_dir / "batches"
+    batches_dir.mkdir(exist_ok=True)
+
+    cell_w = TILE_SIZE + CELL_PADDING * 2
+    cell_h = TILE_SIZE + CELL_PADDING * 2
+
+    # Index cells by (col, row) for fast lookup
+    cell_by_pos: dict[tuple[int, int], dict] = {}
+    for c in cells:
+        cell_by_pos[(c["col"], c["row"])] = c
+
+    batches = []
+    MAX_FRAMES_PER_BATCH = 6
+
+    for entry in ANIMATED_TILES:
+        name, base_col, base_row, n_frames, offset, horizontal, block_start_delta = entry
+        min_x, max_x = _ANIM_COL_OFFSETS.get(name, (-3, 6))
+
+        # Collect cells per frame: frames[i] = list of cell dicts in order
+        frames: list[list[dict]] = []
+        for i in range(n_frames):
+            frame_cells = []
+            if horizontal:
+                pos = (base_col + i * offset, base_row)
+                c = cell_by_pos.get(pos)
+                if c is not None:
+                    frame_cells.append(c)
+            else:
+                block_start = base_row + block_start_delta
+                for row_delta in range(abs(offset)):
+                    src_row = block_start + row_delta + i * offset
+                    for col_offset in range(min_x, max_x + 1):
+                        col = base_col + col_offset
+                        if 0 <= col < ATLAS_COLS:
+                            c = cell_by_pos.get((col, src_row))
+                            if c is not None:
+                                frame_cells.append(c)
+            frames.append(frame_cells)
+
+        if not frames or not frames[0]:
+            continue
+
+        cells_per_frame = max(len(f) for f in frames)
+
+        # Determine the tile type for anchor routing from base frame cells
+        base_types = [c["type"] for c in frames[0]] if frames[0] else []
+        tile_type = base_types[0] if base_types else "water"
+
+        # Sub-batch large animations (>6 frames) into groups of MAX_FRAMES_PER_BATCH
+        if n_frames > MAX_FRAMES_PER_BATCH:
+            # Split into sub-batches: each includes frame 0 as reference + up to
+            # (MAX_FRAMES_PER_BATCH - 1) additional frames
+            non_base_indices = list(range(1, n_frames))
+            sub_batches_indices = []
+            for chunk_start in range(0, len(non_base_indices), MAX_FRAMES_PER_BATCH - 1):
+                chunk = non_base_indices[chunk_start:chunk_start + MAX_FRAMES_PER_BATCH - 1]
+                sub_batches_indices.append([0] + chunk)
+        else:
+            sub_batches_indices = [list(range(n_frames))]
+
+        for sub_idx, frame_indices in enumerate(sub_batches_indices):
+            n_cols = len(frame_indices)
+            n_rows = cells_per_frame
+
+            canvas_w = n_cols * cell_w + (n_cols + 1) * GRID_LINE_WIDTH
+            canvas_h = n_rows * cell_h + (n_rows + 1) * GRID_LINE_WIDTH
+
+            canvas = Image.new("RGBA", (canvas_w, canvas_h), LINE_COLOR)
+            draw = ImageDraw.Draw(canvas)
+
+            safe_name = name.replace("/", "_")
+            batch_id = f"anim_{safe_name}_{sub_idx}"
+            batch_cells = []
+
+            for grid_col_idx, frame_idx in enumerate(frame_indices):
+                frame_cell_list = frames[frame_idx] if frame_idx < len(frames) else []
+                for grid_row_idx in range(n_rows):
+                    cx = GRID_LINE_WIDTH + grid_col_idx * (cell_w + GRID_LINE_WIDTH)
+                    cy = GRID_LINE_WIDTH + grid_row_idx * (cell_h + GRID_LINE_WIDTH)
+
+                    draw.rectangle(
+                        [cx, cy, cx + cell_w - 1, cy + cell_h - 1],
+                        fill=BG_COLOR,
+                    )
+
+                    if grid_row_idx < len(frame_cell_list):
+                        cell_info = frame_cell_list[grid_row_idx]
+                        tile_img = Image.open(cell_info["path"]).convert("RGBA")
+                        paste_x = cx + CELL_PADDING
+                        paste_y = cy + CELL_PADDING
+                        canvas.paste(tile_img, (paste_x, paste_y), tile_img)
+
+                        batch_cells.append({
+                            **cell_info,
+                            "grid_row": grid_row_idx,
+                            "grid_col": grid_col_idx,
+                        })
+
+            # Scale up 4x for AI visibility
+            scale_factor = 4
+            scaled = canvas.resize(
+                (canvas_w * scale_factor, canvas_h * scale_factor),
+                Image.NEAREST,
+            )
+
+            batch_path = batches_dir / f"{batch_id}.png"
+            scaled.save(batch_path)
+
+            batch_meta = {
+                "batch_id": batch_id,
+                "tile_type": tile_type,
+                "cols": n_cols,
+                "rows": n_rows,
+                "canvas_w": canvas_w,
+                "canvas_h": canvas_h,
+                "cell_w": cell_w,
+                "cell_h": cell_h,
+                "cells": batch_cells,
+                "path": str(batch_path),
+                "scale_factor": scale_factor,
+                "is_animation_batch": True,
+                "anim_name": name,
+                "frame_indices": frame_indices,
+                "cells_per_frame": cells_per_frame,
+            }
+            batches.append(batch_meta)
+
+    # Summary
+    print(f"  Created {len(batches)} animation batches:")
+    for b in batches:
+        print(f"    {b['anim_name']}: {len(b['frame_indices'])} frames, "
+              f"{b['cells_per_frame']} cells/frame")
 
     return batches
 
@@ -1587,8 +1821,11 @@ def reskin_batch_gemini(
     anchor_paths: list[str] | None = None,
     cells: list[dict] | None = None,
     style_sheet_path: str | None = None,
+    is_animation_batch: bool = False,
 ) -> Image.Image | None:
     """Send a batch grid to Gemini Flash for reskinning.
+
+    When *is_animation_batch* is True, uses ``ANIM_BATCH_PROMPT_TEMPLATE``.
 
     When *anchor_paths* contains one path, uses the two-image
     ``BATCH_PROMPT_TEMPLATE`` (anchor + batch).  When it contains multiple
@@ -1637,7 +1874,22 @@ def reskin_batch_gemini(
             data=sheet_data, mime_type="image/png",
         )
 
-    if anchor_paths and len(anchor_paths) > 1:
+    if is_animation_batch and anchor_paths:
+        # Animation batch: use ANIM_BATCH_PROMPT_TEMPLATE
+        prompt = ANIM_BATCH_PROMPT_TEMPLATE.format(
+            cell_legend=cell_legend,
+            style_sheet_instruction=style_sheet_instruction,
+        )
+
+        contents: list = [prompt]
+        if style_sheet_part is not None:
+            contents.append(style_sheet_part)
+        for ap in anchor_paths:
+            data = open(ap, "rb").read()
+            contents.append(types.Part.from_bytes(data=data, mime_type="image/png"))
+        batch_data = open(batch_path, "rb").read()
+        contents.append(types.Part.from_bytes(data=batch_data, mime_type="image/png"))
+    elif anchor_paths and len(anchor_paths) > 1:
         # Multi-anchor prompt: type anchor + plain anchor + batch to reskin
         prompt = MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE.format(
             type_name=tile_type, type_hint=type_hint,
@@ -2075,6 +2327,7 @@ def _reskin_batches(
                 anchor_paths=batch_anchor_paths,
                 cells=batch_meta.get("cells"),
                 style_sheet_path=style_sheet_path,
+                is_animation_batch=batch_meta.get("is_animation_batch", False),
             )
             if reskinned_img is None:
                 with print_lock:
@@ -2309,8 +2562,8 @@ def main():
         help="Clear cached reskinned batches and regenerate",
     )
     parser.add_argument(
-        "--workers", type=int, default=8,
-        help="Number of parallel workers for API calls (default: 8)",
+        "--workers", type=int, default=16,
+        help="Number of parallel workers for API calls (default: 16)",
     )
     parser.add_argument(
         "--stage", type=str, default="full",
@@ -2387,12 +2640,18 @@ def main():
 
     # Create type-grouped batches (after compositing so cells have updated backgrounds)
     print("\n3. Creating type-grouped batches...")
-    batches = create_typed_batches(cells, work_dir)
+    type_batches = create_typed_batches(cells, work_dir)
+
+    print("\n4. Creating animation batches...")
+    anim_batches = build_animation_batches(cells, work_dir)
+
+    batches = type_batches + anim_batches
     batches_manifest = work_dir / "batches_manifest.json"
     batches_manifest.write_text(json.dumps(batches, indent=2))
 
     if args.dry_run:
-        print(f"\nDry run complete. {len(cells)} cells in {len(batches)} batches.")
+        print(f"\nDry run complete. {len(cells)} cells in {len(batches)} batches "
+              f"({len(type_batches)} type + {len(anim_batches)} animation).")
         print(f"Batch grids saved to {work_dir / 'batches'}/")
         return
 
@@ -2469,11 +2728,12 @@ def main():
                     extracted = extract_from_reskinned(reskinned_img, batch_meta)
                     all_reskinned_cells.extend(extracted)
 
-        # Palette snap (replaces normalize_colors_by_type)
-        print(f"\n  Snapping colors to master palette...")
-        all_reskinned_cells = snap_to_palette(
-            all_reskinned_cells, palette_lab, palette_rgb,
-        )
+        # Palette snap disabled — it compressed 454K unique colors down to ~146,
+        # making the reskin look too similar to the original.  The style reference
+        # sheet + per-tile descriptions provide sufficient cross-batch coherence.
+        # all_reskinned_cells = snap_to_palette(
+        #     all_reskinned_cells, palette_lab, palette_rgb,
+        # )
 
         # Harmonize transition tile colors
         if not args.skip_harmonize:
@@ -2482,11 +2742,8 @@ def main():
                 all_reskinned_cells, atlas_path,
             )
 
-        # Copy base frame art to all animation frames to prevent flickering
-        print(f"\n  Copying base frames to animation frames...")
-        all_reskinned_cells = copy_base_frames_to_anim_frames(
-            all_reskinned_cells, atlas_path,
-        )
+        # copy_base_frames_to_anim_frames() removed — all animation frames
+        # now get their own reskinned art from Gemini via animation batches.
 
         print(f"\n  Reassembling atlas ({len(all_reskinned_cells)} cells)...")
         output_path = (
