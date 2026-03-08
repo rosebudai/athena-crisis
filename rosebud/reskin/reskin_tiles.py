@@ -420,7 +420,7 @@ ANCHOR_PROMPT_TEMPLATE = (
     "{style_sheet_instruction}"
     "Reskin this {type_name} game tile to a completely different visual theme. "
     "Target style: {theme_prompt}. "
-    "Top-down orthogonal perspective, 16-bit modern retro pixel art style. "
+    "Top-down orthogonal perspective. "
     "{type_hint} "
     "RULES: "
     "1) Keep the exact same grid layout and tile position. "
@@ -433,8 +433,7 @@ ANCHOR_PROMPT_TEMPLATE = (
 BATCH_PROMPT_TEMPLATE = (
     "{style_sheet_instruction}"
     "Reskin the tiles in the last image to match the visual style of the anchor tile. "
-    "These are {type_name} game tiles, top-down orthogonal perspective, "
-    "16-bit modern retro pixel art style. "
+    "These are {type_name} game tiles, top-down orthogonal perspective. "
     "Target style: {theme_prompt}. "
     "{type_hint} "
     "{cell_legend}"
@@ -452,8 +451,7 @@ MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE = (
     "The main reference shows the target style for {type_name} tiles. "
     "Additional references show context colors — match water portions to any water "
     "reference and grass/land portions to any grass reference exactly. "
-    "These are {type_name} game tiles, top-down orthogonal perspective, "
-    "16-bit modern retro pixel art style. "
+    "These are {type_name} game tiles, top-down orthogonal perspective. "
     "Target style: {theme_prompt}. "
     "{type_hint} "
     "{cell_legend}"
@@ -1089,6 +1087,7 @@ def build_animation_batches(cells: list[dict], work_dir: Path) -> list[dict]:
 
     batches = []
     MAX_FRAMES_PER_BATCH = 6
+    MAX_ROWS_PER_BATCH = 20  # Gemini fails on very tall grids (e.g. Pier at 35 rows)
 
     for entry in ANIMATED_TILES:
         name, _, _, n_frames, _, _, _ = entry
@@ -1132,95 +1131,106 @@ def build_animation_batches(cells: list[dict], work_dir: Path) -> list[dict]:
         else:
             sub_batches_indices = [list(range(n_frames))]
 
+        # Build row chunks: split tall grids into sub-batches by row
+        if cells_per_frame > MAX_ROWS_PER_BATCH:
+            row_chunks = []
+            for start in range(0, cells_per_frame, MAX_ROWS_PER_BATCH):
+                row_chunks.append((start, min(start + MAX_ROWS_PER_BATCH, cells_per_frame)))
+        else:
+            row_chunks = [(0, cells_per_frame)]
+
         for sub_idx, frame_indices in enumerate(sub_batches_indices):
-            n_cols = len(frame_indices)
-            n_rows = cells_per_frame
+            for row_chunk_idx, (row_start, row_end) in enumerate(row_chunks):
+                n_cols = len(frame_indices)
+                n_rows = row_end - row_start
 
-            canvas_w = n_cols * cell_w + (n_cols + 1) * GRID_LINE_WIDTH
-            canvas_h = n_rows * cell_h + (n_rows + 1) * GRID_LINE_WIDTH
+                canvas_w = n_cols * cell_w + (n_cols + 1) * GRID_LINE_WIDTH
+                canvas_h = n_rows * cell_h + (n_rows + 1) * GRID_LINE_WIDTH
 
-            canvas = Image.new("RGBA", (canvas_w, canvas_h), LINE_COLOR)
-            draw = ImageDraw.Draw(canvas)
+                canvas = Image.new("RGBA", (canvas_w, canvas_h), LINE_COLOR)
+                draw = ImageDraw.Draw(canvas)
 
-            safe_name = name.replace("/", "_")
-            batch_id = f"anim_{safe_name}_{sub_idx}"
-            batch_cells = []
+                safe_name = name.replace("/", "_")
+                if len(row_chunks) > 1:
+                    batch_id = f"anim_{safe_name}_{sub_idx}r{row_chunk_idx}"
+                else:
+                    batch_id = f"anim_{safe_name}_{sub_idx}"
+                batch_cells = []
 
-            for grid_col_idx, frame_idx in enumerate(frame_indices):
-                frame_cell_list = frames[frame_idx] if frame_idx < len(frames) else []
-                for grid_row_idx in range(n_rows):
-                    cx = GRID_LINE_WIDTH + grid_col_idx * (cell_w + GRID_LINE_WIDTH)
-                    cy = GRID_LINE_WIDTH + grid_row_idx * (cell_h + GRID_LINE_WIDTH)
+                for grid_col_idx, frame_idx in enumerate(frame_indices):
+                    frame_cell_list = frames[frame_idx] if frame_idx < len(frames) else []
+                    for local_row in range(n_rows):
+                        cx = GRID_LINE_WIDTH + grid_col_idx * (cell_w + GRID_LINE_WIDTH)
+                        cy = GRID_LINE_WIDTH + local_row * (cell_h + GRID_LINE_WIDTH)
 
-                    draw.rectangle(
-                        [cx, cy, cx + cell_w - 1, cy + cell_h - 1],
-                        fill=BG_COLOR,
-                    )
+                        draw.rectangle(
+                            [cx, cy, cx + cell_w - 1, cy + cell_h - 1],
+                            fill=BG_COLOR,
+                        )
 
-                used_rows: set[int] = set()
-                for fallback_row_idx, cell_info in enumerate(frame_cell_list):
-                    grid_row_idx = cell_info.get("anim_cell_idx")
-                    if (
-                        grid_row_idx is None
-                        or grid_row_idx < 0
-                        or grid_row_idx >= n_rows
-                        or grid_row_idx in used_rows
-                    ):
-                        grid_row_idx = fallback_row_idx
-                        while grid_row_idx in used_rows and grid_row_idx < n_rows:
-                            grid_row_idx += 1
-                        if grid_row_idx >= n_rows:
+                    used_rows: set[int] = set()
+                    for fallback_row_idx, cell_info in enumerate(frame_cell_list):
+                        global_row = cell_info.get("anim_cell_idx")
+                        if global_row is None:
+                            global_row = fallback_row_idx
+
+                        # Skip cells outside this row chunk
+                        if global_row < row_start or global_row >= row_end:
                             continue
 
-                    used_rows.add(grid_row_idx)
-                    cx = GRID_LINE_WIDTH + grid_col_idx * (cell_w + GRID_LINE_WIDTH)
-                    cy = GRID_LINE_WIDTH + grid_row_idx * (cell_h + GRID_LINE_WIDTH)
+                        local_row = global_row - row_start
+                        if local_row in used_rows:
+                            continue
 
-                    tile_img = Image.open(cell_info["path"]).convert("RGBA")
-                    paste_x = cx + CELL_PADDING
-                    paste_y = cy + CELL_PADDING
-                    canvas.paste(tile_img, (paste_x, paste_y), tile_img)
+                        used_rows.add(local_row)
+                        cx = GRID_LINE_WIDTH + grid_col_idx * (cell_w + GRID_LINE_WIDTH)
+                        cy = GRID_LINE_WIDTH + local_row * (cell_h + GRID_LINE_WIDTH)
 
-                    include_in_batch_meta = not (
-                        frame_idx == 0 and sub_idx > 0 and n_frames > MAX_FRAMES_PER_BATCH
-                    )
-                    if not include_in_batch_meta:
-                        continue
+                        tile_img = Image.open(cell_info["path"]).convert("RGBA")
+                        paste_x = cx + CELL_PADDING
+                        paste_y = cy + CELL_PADDING
+                        canvas.paste(tile_img, (paste_x, paste_y), tile_img)
 
-                    batch_cells.append({
-                        **cell_info,
-                        "grid_row": grid_row_idx,
-                        "grid_col": grid_col_idx,
-                    })
+                        include_in_batch_meta = not (
+                            frame_idx == 0 and sub_idx > 0 and n_frames > MAX_FRAMES_PER_BATCH
+                        )
+                        if not include_in_batch_meta:
+                            continue
 
-            # Scale up 4x for AI visibility
-            scale_factor = 4
-            scaled = canvas.resize(
-                (canvas_w * scale_factor, canvas_h * scale_factor),
-                Image.NEAREST,
-            )
+                        batch_cells.append({
+                            **cell_info,
+                            "grid_row": local_row,
+                            "grid_col": grid_col_idx,
+                        })
 
-            batch_path = batches_dir / f"{batch_id}.png"
-            scaled.save(batch_path)
+                # Scale up 4x for AI visibility
+                scale_factor = 4
+                scaled = canvas.resize(
+                    (canvas_w * scale_factor, canvas_h * scale_factor),
+                    Image.NEAREST,
+                )
 
-            batch_meta = {
-                "batch_id": batch_id,
-                "tile_type": tile_type,
-                "cols": n_cols,
-                "rows": n_rows,
-                "canvas_w": canvas_w,
-                "canvas_h": canvas_h,
-                "cell_w": cell_w,
-                "cell_h": cell_h,
-                "cells": batch_cells,
-                "path": str(batch_path),
-                "scale_factor": scale_factor,
-                "is_animation_batch": True,
-                "anim_name": name,
-                "frame_indices": frame_indices,
-                "cells_per_frame": cells_per_frame,
-            }
-            batches.append(batch_meta)
+                batch_path = batches_dir / f"{batch_id}.png"
+                scaled.save(batch_path)
+
+                batch_meta = {
+                    "batch_id": batch_id,
+                    "tile_type": tile_type,
+                    "cols": n_cols,
+                    "rows": n_rows,
+                    "canvas_w": canvas_w,
+                    "canvas_h": canvas_h,
+                    "cell_w": cell_w,
+                    "cell_h": cell_h,
+                    "cells": batch_cells,
+                    "path": str(batch_path),
+                    "scale_factor": scale_factor,
+                    "is_animation_batch": True,
+                    "anim_name": name,
+                    "frame_indices": frame_indices,
+                    "cells_per_frame": n_rows,
+                }
+                batches.append(batch_meta)
 
     # Summary
     print(f"  Created {len(batches)} animation batches:")
@@ -1437,27 +1447,9 @@ def generate_style_reference_sheet(
         x0 = margin + col * cell_w
         y0 = margin + row * cell_h
 
-        # Load and scale the anchor tile (original 24×24 PNG from the cell,
-        # but anchors are saved as scaled grid images — extract the tile area)
-        anchor_img = Image.open(anchor_paths[terrain_type]).convert("RGBA")
-
-        # Anchors are single-cell grids at 4× scale. Extract the inner tile
-        # and downscale to native 24×24 first, then upscale cleanly to avoid
-        # uneven 96→120 scaling that distorts pixel art.
-        anchor_scale = 4
-        inner_offset = (GRID_LINE_WIDTH + CELL_PADDING) * anchor_scale
-        inner_size = TILE_SIZE * anchor_scale
-        if (anchor_img.width >= inner_offset + inner_size and
-                anchor_img.height >= inner_offset + inner_size):
-            tile_crop = anchor_img.crop((
-                inner_offset, inner_offset,
-                inner_offset + inner_size, inner_offset + inner_size,
-            ))
-        else:
-            tile_crop = anchor_img
-
-        # Downscale to native tile size, then upscale by clean integer
-        native = tile_crop.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
+        # Extract the 24×24 tile from the anchor (handles any Gemini output
+        # resolution by downscaling to native grid size first).
+        native = _extract_plain_tile_from_anchor(anchor_paths[terrain_type])
         tile_display_img = native.resize(
             (tile_display, tile_display), Image.NEAREST,
         )
@@ -1479,75 +1471,6 @@ def generate_style_reference_sheet(
     return sheet_path
 
 
-def extract_palette(
-    anchor_paths: dict[str, str],
-    work_dir: Path,
-    max_colors: int = 16,
-) -> np.ndarray:
-    """Extract a quantized color palette from anchor tiles in LAB space.
-
-    Gemini-generated anchors have smooth gradients with 100K+ unique colors.
-    We quantize each anchor down to ``max_colors`` using PIL median-cut, then
-    combine and deduplicate across all anchors.
-
-    Returns numpy array of shape (N, 3) in LAB color space.
-    Also saves palette.json with hex colors.
-    """
-    all_colors = set()
-
-    for terrain_type, path in anchor_paths.items():
-        img = Image.open(path).convert("RGBA")
-        arr = np.array(img)
-
-        # Only consider visible pixels (alpha > 0)
-        visible = arr[:, :, 3] > 0
-        if not visible.any():
-            continue
-
-        # Exclude exact grid-line color (0,0,0) and exact padding color (200,200,200)
-        rgb = arr[:, :, :3]
-        is_grid_line = (rgb == LINE_COLOR[:3]).all(axis=2)
-        is_padding = (rgb == BG_COLOR[:3]).all(axis=2)
-        tile_pixels = visible & ~is_grid_line & ~is_padding
-        if not tile_pixels.any():
-            tile_pixels = visible  # fallback
-
-        # Quantize the filtered tile pixels via PIL median-cut
-        pixel_rgb = rgb[tile_pixels]  # (P, 3)
-        row_img = Image.fromarray(pixel_rgb.reshape(1, -1, 3))
-        quantized = row_img.quantize(
-            colors=max_colors, method=Image.Quantize.MEDIANCUT,
-        )
-
-        # Extract the actually-used colors from the quantized result
-        qpal = quantized.getpalette()
-        quantized_arr = np.array(quantized)
-        used_indices = set(quantized_arr.flat)
-        for idx in used_indices:
-            r, g, b = qpal[idx * 3], qpal[idx * 3 + 1], qpal[idx * 3 + 2]
-            all_colors.add((r, g, b))
-
-    if not all_colors:
-        print("WARNING: No visible pixels found in anchor tiles")
-        return np.zeros((0, 3), dtype=np.float64)
-
-    # Convert to numpy arrays
-    palette_rgb = np.array(sorted(all_colors), dtype=np.uint8)  # (M, 3)
-    palette_lab = _rgb_to_lab(palette_rgb)
-
-    # Save as palette.json with hex values
-    hex_colors = [f"#{r:02x}{g:02x}{b:02x}" for r, g, b in palette_rgb]
-    palette_json = {
-        "colors": hex_colors,
-        "count": len(hex_colors),
-    }
-    palette_path = work_dir / "palette.json"
-    palette_path.write_text(json.dumps(palette_json, indent=2))
-
-    print(f"  Quantized to {len(palette_rgb)} unique colors from {len(anchor_paths)} anchors")
-    print(f"  Saved palette to {palette_path}")
-
-    return palette_lab
 
 
 def _extract_plain_tile_from_anchor(anchor_path: str) -> Image.Image:
@@ -1672,61 +1595,6 @@ def composite_feature_backgrounds(
     return composited_count
 
 
-def snap_to_palette(
-    reskinned_cells: list[tuple[dict, Image.Image]],
-    palette_lab: np.ndarray,
-    palette_rgb: np.ndarray,
-) -> list[tuple[dict, Image.Image]]:
-    """Snap every visible pixel to nearest palette color in LAB space.
-
-    For each cell image:
-    - Convert visible pixels to LAB
-    - Find nearest palette color by Euclidean distance
-    - Replace RGB with palette color
-    - Preserve alpha unchanged
-
-    Returns new list of (cell_info, snapped_image) tuples.
-
-    Note: If the palette is large (80+ colors) and cells are many, this
-    could use significant memory due to the (P, M, 3) distance matrix.
-    For typical atlas sizes (~840 cells, ~80 palette colors) this is fine.
-    """
-    if len(palette_lab) == 0:
-        print("  WARNING: Empty palette, skipping snap")
-        return list(reskinned_cells)
-
-    result = []
-
-    for cell_info, img in reskinned_cells:
-        arr = np.array(img).copy()  # (H, W, 4) uint8
-        visible = arr[:, :, 3] > 0
-
-        if not visible.any():
-            result.append((cell_info, img))
-            continue
-
-        # Get visible pixel RGB values
-        visible_rgb = arr[:, :, :3][visible]  # (P, 3)
-
-        # Convert to LAB
-        visible_lab = _rgb_to_lab(visible_rgb)  # (P, 3)
-
-        # Find nearest palette color by Euclidean distance in LAB space
-        # visible_lab: (P, 3), palette_lab: (M, 3)
-        diffs = visible_lab[:, np.newaxis, :] - palette_lab[np.newaxis, :, :]  # (P, M, 3)
-        distances = np.sum(diffs ** 2, axis=2)  # (P, M)
-        nearest_idx = np.argmin(distances, axis=1)  # (P,)
-        new_rgb = palette_rgb[nearest_idx]  # (P, 3)
-
-        # Replace visible pixel RGB values, keep alpha unchanged
-        arr[:, :, :3][visible] = new_rgb
-
-        snapped_img = Image.fromarray(arr)
-        result.append((cell_info, snapped_img))
-
-    print(f"  Snapped {len(result)} cells to {len(palette_lab)}-color palette")
-
-    return result
 
 
 def harmonize_transitions(
@@ -2093,38 +1961,47 @@ def extract_from_reskinned(
     reskinned_img: Image.Image,
     batch_meta: dict,
 ) -> list[tuple[dict, Image.Image]]:
-    """Extract individual reskinned cells from the AI output grid."""
+    """Extract individual reskinned cells from the AI output grid.
+
+    Uses proportional coordinate scaling to map expected grid positions
+    to the AI output resolution (which may differ from the input).
+    """
     scale_factor = batch_meta["scale_factor"]
     cell_w = batch_meta["cell_w"]
     cell_h = batch_meta["cell_h"]
+    canvas_w = batch_meta["canvas_w"]
+    canvas_h = batch_meta["canvas_h"]
 
-    native_w = batch_meta["canvas_w"]
-    native_h = batch_meta["canvas_h"]
+    img_w, img_h = reskinned_img.size
+    x_ratio = img_w / (canvas_w * scale_factor)
+    y_ratio = img_h / (canvas_h * scale_factor)
 
-    scaled_w = native_w * scale_factor
-    scaled_h = native_h * scale_factor
-
-    if reskinned_img.size != (scaled_w, scaled_h):
-        reskinned_img = reskinned_img.resize((scaled_w, scaled_h), Image.NEAREST)
-
-    native_img = reskinned_img.resize((native_w, native_h), Image.NEAREST)
-
-    results = []
+    results: list[tuple[dict, Image.Image]] = []
     for cell_info in batch_meta["cells"]:
         row = cell_info["grid_row"]
         col = cell_info["grid_col"]
 
+        # Compute expected native positions then scale
         cx = GRID_LINE_WIDTH + col * (cell_w + GRID_LINE_WIDTH)
         cy = GRID_LINE_WIDTH + row * (cell_h + GRID_LINE_WIDTH)
-
         tile_x = cx + CELL_PADDING
         tile_y = cy + CELL_PADDING
 
-        tile_crop = native_img.crop((
-            tile_x, tile_y,
-            tile_x + TILE_SIZE, tile_y + TILE_SIZE,
-        ))
+        # Scale to AI output coords
+        sx = tile_x * scale_factor * x_ratio
+        sy = tile_y * scale_factor * y_ratio
+        sw = TILE_SIZE * scale_factor * x_ratio
+        sh = TILE_SIZE * scale_factor * y_ratio
 
+        tile_crop = reskinned_img.crop((
+            int(round(sx)),
+            int(round(sy)),
+            int(round(sx + sw)),
+            int(round(sy + sh)),
+        ))
+        tile_crop = tile_crop.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
+
+        # Alpha from original cell, RGB from AI output
         original = Image.open(cell_info["path"]).convert("RGBA")
         r, g, b, _ = tile_crop.split()
         _, _, _, orig_alpha = original.split()
@@ -2641,8 +2518,8 @@ def main():
         choices=["1", "2", "full"],
         help=(
             "Pipeline stage to run. "
-            "1: generate anchor tiles, extract palette, composite backgrounds, exit. "
-            "2: reskin all batches with anchors, palette snap, reassemble atlas, exit. "
+            "1: generate anchor tiles, composite backgrounds, exit. "
+            "2: reskin all batches with anchors, reassemble atlas, exit. "
             "full: all stages sequentially (default)."
         ),
     )
@@ -2655,10 +2532,9 @@ def main():
         help="Skip the background compositing step (grass pixel replacement)",
     )
     parser.add_argument(
-        "--skip-palette-snap",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Skip palette snapping after reskinning (default: skipped)",
+        "--anim-only", type=str, nargs="?", const="*", default=None,
+        help="Process only animation batches. Optionally specify a name (e.g. Sea, River). "
+             "Use without a value to run all animations.",
     )
     parser.add_argument(
         "--debug-atlas", action="store_true",
@@ -2701,9 +2577,6 @@ def main():
         print("\n--- Stage 1: Generating style reference sheet ---")
         style_sheet_path = str(generate_style_reference_sheet(anchor_paths, work_dir))
 
-        print("\n--- Stage 1: Extracting palette from anchors ---")
-        palette_lab = extract_palette(anchor_paths, work_dir)
-
         # Composite reskinned plain background onto feature tiles
         if not args.skip_composite:
             print("\n--- Stage 1: Compositing feature backgrounds ---")
@@ -2711,7 +2584,6 @@ def main():
 
         if args.stage == "1":
             print(f"\nStage 1 complete. Review anchor tiles at {work_dir}/anchor_*.png")
-            print(f"Palette saved to {work_dir}/palette.json")
             print("If anchors look good, run --stage 2.")
             return
 
@@ -2732,9 +2604,9 @@ def main():
         print(f"Batch grids saved to {work_dir / 'batches'}/")
         return
 
-    # ---- Stage 2: Full reskin + optional palette snap + reassemble ----
+    # ---- Stage 2: Full reskin + reassemble ----
     if args.stage in ("2", "full"):
-        print("\n--- Stage 2: Full reskin with optional palette snap ---")
+        print("\n--- Stage 2: Full reskin + reassemble ---")
         reskinned_dir = work_dir / "reskinned"
         reskinned_dir.mkdir(exist_ok=True)
 
@@ -2769,21 +2641,18 @@ def main():
         else:
             style_sheet_path = None
 
-        # Load palette (always from palette.json for consistency)
-        palette_json_path = work_dir / "palette.json"
-        if not palette_json_path.exists():
-            print("ERROR: palette.json not found. Run --stage 1 first.")
-            sys.exit(1)
-        palette_data = json.loads(palette_json_path.read_text())
-        palette_rgb = np.array([
-            [int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16)]
-            for h in palette_data["colors"]
-        ], dtype=np.uint8)
-        palette_lab = _rgb_to_lab(palette_rgb.astype(np.float64))
-
         # Reskin batches
         target_batches = batches
-        if args.type_only:
+        if args.anim_only:
+            if args.anim_only == "*":
+                target_batches = [b for b in batches if b.get("is_animation_batch")]
+            else:
+                target_batches = [
+                    b for b in batches
+                    if b.get("is_animation_batch") and b.get("anim_name") == args.anim_only
+                ]
+            print(f"\n  Reskinning {len(target_batches)} animation batches...")
+        elif args.type_only:
             target_batches = [b for b in batches if b["tile_type"] == args.type_only]
             print(f"\n  Reskinning {len(target_batches)} {args.type_only} batches...")
         else:
@@ -2795,20 +2664,16 @@ def main():
             style_sheet_path=style_sheet_path,
         )
 
-        # If --type-only, load non-targeted types from cache
-        if args.type_only:
-            other_batches = [b for b in batches if b["tile_type"] != args.type_only]
+        # If filtering, load non-targeted batches from cache
+        if args.type_only or args.anim_only:
+            target_ids = {b["batch_id"] for b in target_batches}
+            other_batches = [b for b in batches if b["batch_id"] not in target_ids]
             for batch_meta in other_batches:
                 rp = reskinned_dir / f"{batch_meta['batch_id']}_reskinned.png"
                 if rp.exists():
                     reskinned_img = Image.open(rp).convert("RGBA")
                     extracted = extract_from_reskinned(reskinned_img, batch_meta)
                     all_reskinned_cells.extend(extracted)
-
-        if not args.skip_palette_snap:
-            all_reskinned_cells = snap_to_palette(
-                all_reskinned_cells, palette_lab, palette_rgb,
-            )
 
         # Harmonize transition tile colors
         if not args.skip_harmonize:
