@@ -6,6 +6,10 @@ from PIL import Image
 from pathlib import Path
 from collections import defaultdict
 import json
+import io
+import os
+import sys
+import types
 
 # Import the module under test
 import importlib.util
@@ -2444,6 +2448,121 @@ class TestAnimationBatches:
         tmpl = reskin_tiles.ANIM_BATCH_PROMPT_TEMPLATE
         assert "{style_sheet_instruction}" in tmpl, "Missing {style_sheet_instruction}"
         assert "{cell_legend}" in tmpl, "Missing {cell_legend}"
+
+    def test_build_animation_batches_uses_anim_cell_idx_for_rows(self, tmp_path):
+        """Animation batch row placement should respect anim_cell_idx values."""
+        cells = self._make_all_anim_cells(tmp_path)
+
+        removed = False
+        filtered_cells = []
+        for cell in cells:
+            if (
+                cell["anim_name"] == "Sea"
+                and cell["anim_frame_idx"] == 1
+                and cell["anim_cell_idx"] == 0
+                and not removed
+            ):
+                removed = True
+                continue
+            filtered_cells.append(cell)
+
+        assert removed, "Expected to remove one Sea frame-1 cell for sparse-row test"
+
+        batches = reskin_tiles.build_animation_batches(filtered_cells, tmp_path)
+        sea_batch = next(
+            b for b in batches
+            if b["anim_name"] == "Sea" and 1 in b["frame_indices"]
+        )
+
+        frame_col = sea_batch["frame_indices"].index(1)
+        target_cell = next(
+            c for c in sea_batch["cells"]
+            if c["anim_name"] == "Sea"
+            and c["anim_frame_idx"] == 1
+            and c["anim_cell_idx"] == 1
+        )
+
+        assert target_cell["grid_col"] == frame_col
+        assert target_cell["grid_row"] == 1
+
+    def test_build_animation_batches_cleans_stale_anim_outputs(self, tmp_path):
+        """Old anim_* artifacts in the work dir should be removed before rebuild."""
+        stale_dir = tmp_path / "anim_old_batch"
+        stale_dir.mkdir()
+        stale_file = tmp_path / "batches" / "anim_old.png"
+        stale_file.parent.mkdir()
+        stale_file.write_bytes(b"stale")
+
+        cells = self._make_all_anim_cells(tmp_path)
+        reskin_tiles.build_animation_batches(cells, tmp_path)
+
+        assert not stale_dir.exists()
+        assert not stale_file.exists()
+
+
+class TestReskinBatchGemini:
+    """Focused tests for prompt routing in reskin_batch_gemini."""
+
+    def test_animation_batches_use_anim_prompt_without_anchors(self, tmp_path, monkeypatch):
+        """Animation batches should use the animation prompt even without anchors."""
+        batch_path = tmp_path / "batch.png"
+        Image.new("RGBA", (24, 24), (10, 20, 30, 255)).save(batch_path)
+
+        seen = {}
+
+        class _FakePart:
+            def __init__(self, data=None, mime_type=None):
+                self.inline_data = types.SimpleNamespace(data=data, mime_type=mime_type)
+
+            @classmethod
+            def from_bytes(cls, data, mime_type):
+                return cls(data=data, mime_type=mime_type)
+
+        class _FakeResponse:
+            def __init__(self):
+                buf = io.BytesIO()
+                Image.new("RGBA", (24, 24), (1, 2, 3, 255)).save(buf, format="PNG")
+                image_part = types.SimpleNamespace(
+                    inline_data=types.SimpleNamespace(data=buf.getvalue(), mime_type="image/png")
+                )
+                self.candidates = [types.SimpleNamespace(content=types.SimpleNamespace(parts=[image_part]))]
+
+        class _FakeModels:
+            def generate_content(self, *, contents, **kwargs):
+                seen["contents"] = contents
+                return _FakeResponse()
+
+        class _FakeClient:
+            def __init__(self, api_key):
+                self.models = _FakeModels()
+
+        fake_genai = types.ModuleType("google.genai")
+        fake_genai.Client = _FakeClient
+        fake_genai.types = types.SimpleNamespace(
+            Part=_FakePart,
+            GenerateContentConfig=lambda **kwargs: kwargs,
+        )
+        fake_google = types.ModuleType("google")
+        fake_google.genai = fake_genai
+
+        monkeypatch.setitem(sys.modules, "google", fake_google)
+        monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+        image = reskin_tiles.reskin_batch_gemini(
+            batch_path=str(batch_path),
+            theme={"prompt": "cozy"},
+            batch_id="anim_test",
+            tile_type="water",
+            anchor_paths=None,
+            is_animation_batch=True,
+        )
+
+        assert image is not None
+        assert seen["contents"][0] == reskin_tiles.ANIM_BATCH_PROMPT_TEMPLATE.format(
+            cell_legend="",
+            style_sheet_instruction="",
+        )
 
 
 # ---------------------------------------------------------------------------
