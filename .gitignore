@@ -23,6 +23,9 @@ source_strings.json
 tests/testSetup
 tsconfig.tsbuildinfo
 
+# Claude specs
+.claude/specs/
+
 # Codegen
 apollo/EncodedActions.tsx
 apollo/FormatActions.tsx
