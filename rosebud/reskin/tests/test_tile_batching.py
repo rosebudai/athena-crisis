@@ -2287,3 +2287,223 @@ class TestStyleSheetInstructionInPrompts:
             cell_legend="",
         )
         assert prompt.startswith("The first image is a world style reference")
+
+
+# ---------------------------------------------------------------------------
+# build_animation_batches
+# ---------------------------------------------------------------------------
+
+class TestAnimationBatches:
+    """Tests for animation-specific batch creation via build_animation_batches."""
+
+    def _make_all_anim_cells(self, tmp_path):
+        """Create cells for ALL positions in the _anim_cell_map (base + non-base)."""
+        cells = []
+        if reskin_tiles._anim_cell_map is None:
+            reskin_tiles._build_anim_cell_map_conservative()
+        for (col, row), (anim_name, frame_idx, cell_idx) in reskin_tiles._anim_cell_map.items():
+            cells.append(_make_cell(col, row, tmp_path=tmp_path))
+        return cells
+
+    def test_build_animation_batches_creates_batches(self, tmp_path):
+        """build_animation_batches should create at least one batch."""
+        cells = self._make_all_anim_cells(tmp_path)
+        batches = reskin_tiles.build_animation_batches(cells, tmp_path)
+        assert len(batches) > 0, "Expected at least one animation batch"
+
+    def test_animation_batch_has_correct_metadata(self, tmp_path):
+        """Each animation batch should have is_animation_batch, anim_name,
+        frame_indices, and cells_per_frame fields."""
+        cells = self._make_all_anim_cells(tmp_path)
+        batches = reskin_tiles.build_animation_batches(cells, tmp_path)
+        for b in batches:
+            assert b["is_animation_batch"] is True, (
+                f"Batch {b['batch_id']} missing is_animation_batch flag"
+            )
+            assert "anim_name" in b, f"Batch {b['batch_id']} missing anim_name"
+            assert isinstance(b["anim_name"], str)
+            assert "frame_indices" in b, f"Batch {b['batch_id']} missing frame_indices"
+            assert isinstance(b["frame_indices"], list)
+            assert len(b["frame_indices"]) > 0
+            assert "cells_per_frame" in b, f"Batch {b['batch_id']} missing cells_per_frame"
+            assert b["cells_per_frame"] >= 1
+
+    def test_frames_as_columns_layout(self, tmp_path):
+        """grid_col in batch cells should correspond to the frame index position
+        within the sub-batch's frame_indices list."""
+        cells = self._make_all_anim_cells(tmp_path)
+        batches = reskin_tiles.build_animation_batches(cells, tmp_path)
+        for b in batches:
+            n_cols = b["cols"]
+            assert n_cols == len(b["frame_indices"]), (
+                f"Batch {b['batch_id']}: cols ({n_cols}) != "
+                f"len(frame_indices) ({len(b['frame_indices'])})"
+            )
+            for c in b["cells"]:
+                assert 0 <= c["grid_col"] < n_cols, (
+                    f"Cell grid_col {c['grid_col']} out of range [0, {n_cols})"
+                )
+
+    def test_large_animation_sub_batching(self, tmp_path):
+        """River (24 frames) should be split into sub-batches of at most 6 frames."""
+        cells = self._make_all_anim_cells(tmp_path)
+        batches = reskin_tiles.build_animation_batches(cells, tmp_path)
+        river_batches = [b for b in batches if b["anim_name"] == "River"]
+        assert len(river_batches) > 1, (
+            f"River (24 frames) should produce multiple sub-batches, got {len(river_batches)}"
+        )
+        for b in river_batches:
+            assert len(b["frame_indices"]) <= 6, (
+                f"Sub-batch {b['batch_id']} has {len(b['frame_indices'])} frames, max is 6"
+            )
+
+    def test_sub_batch_includes_frame_zero_reference(self, tmp_path):
+        """Each River sub-batch should include frame 0 as a reference column."""
+        cells = self._make_all_anim_cells(tmp_path)
+        batches = reskin_tiles.build_animation_batches(cells, tmp_path)
+        river_batches = [b for b in batches if b["anim_name"] == "River"]
+        for b in river_batches:
+            assert 0 in b["frame_indices"], (
+                f"Sub-batch {b['batch_id']} missing frame 0 reference: {b['frame_indices']}"
+            )
+
+    def test_no_overlap_with_type_batches(self, tmp_path):
+        """Animation cells should not appear in type batches."""
+        cells = self._make_all_anim_cells(tmp_path)
+        # Also add some non-animation cells for type batches
+        cells.append(_make_cell(0, 0, tmp_path=tmp_path))  # plain
+        cells.append(_make_cell(1, 0, tmp_path=tmp_path))  # plain
+
+        anim_batches = reskin_tiles.build_animation_batches(cells, tmp_path)
+        type_batches = reskin_tiles.create_typed_batches(cells, tmp_path)
+
+        anim_cell_ids = set()
+        for b in anim_batches:
+            for c in b["cells"]:
+                anim_cell_ids.add(c["id"])
+
+        type_cell_ids = set()
+        for b in type_batches:
+            for c in b["cells"]:
+                type_cell_ids.add(c["id"])
+
+        overlap = anim_cell_ids & type_cell_ids
+        assert len(overlap) == 0, (
+            f"{len(overlap)} cells appear in both animation and type batches: "
+            f"{list(overlap)[:10]}"
+        )
+
+    def test_all_cells_covered(self, tmp_path):
+        """Type batches + animation batches should cover all TILE_CELL_MAP cells
+        that have a corresponding extracted cell."""
+        # Build cells for all mapped positions
+        all_cells = []
+        for (col, row), cell_type in reskin_tiles.TILE_CELL_MAP.items():
+            all_cells.append(_make_cell(col, row, tmp_path=tmp_path))
+
+        anim_batches = reskin_tiles.build_animation_batches(all_cells, tmp_path)
+        type_batches = reskin_tiles.create_typed_batches(all_cells, tmp_path)
+
+        batched_ids = set()
+        for b in anim_batches:
+            for c in b["cells"]:
+                batched_ids.add(c["id"])
+        for b in type_batches:
+            for c in b["cells"]:
+                batched_ids.add(c["id"])
+
+        all_ids = {c["id"] for c in all_cells}
+
+        missing = all_ids - batched_ids
+        assert len(missing) == 0, (
+            f"{len(missing)} cells not covered by any batch: {list(missing)[:20]}"
+        )
+
+    def test_anim_cell_map_covers_all_animations(self):
+        """_build_anim_cell_map_conservative should map entries for every
+        animation name in ANIMATED_TILES (except those fully shadowed by
+        earlier entries due to cell overlap, e.g. Computer overlaps Pier)."""
+        if reskin_tiles._anim_cell_map is None:
+            reskin_tiles._build_anim_cell_map_conservative()
+
+        anim_names_in_map = {v[0] for v in reskin_tiles._anim_cell_map.values()}
+        anim_names_in_tiles = {entry[0] for entry in reskin_tiles.ANIMATED_TILES}
+
+        # Computer's cells are fully overlapped by Pier (processed earlier),
+        # so it won't appear in the map.  This is expected.
+        known_shadowed = {"Computer"}
+        missing = anim_names_in_tiles - anim_names_in_map - known_shadowed
+        assert len(missing) == 0, (
+            f"_anim_cell_map is missing animations: {missing}"
+        )
+        # Verify the map has the majority of animation types
+        assert len(anim_names_in_map) >= len(anim_names_in_tiles) - len(known_shadowed)
+
+    def test_anim_prompt_template_has_placeholders(self):
+        """ANIM_BATCH_PROMPT_TEMPLATE should contain required placeholders."""
+        tmpl = reskin_tiles.ANIM_BATCH_PROMPT_TEMPLATE
+        assert "{style_sheet_instruction}" in tmpl, "Missing {style_sheet_instruction}"
+        assert "{cell_legend}" in tmpl, "Missing {cell_legend}"
+
+
+# ---------------------------------------------------------------------------
+# Animation cell exclusion from type batches
+# ---------------------------------------------------------------------------
+
+class TestAnimationCellExclusion:
+    """Verify that animation cells (both base and non-base frames) are
+    properly excluded from type batches."""
+
+    def test_animation_base_frames_excluded_from_type_batches(self, tmp_path):
+        """Base frames (frame 0) of animations should NOT appear in type batches."""
+        # Sea base frame: (8, 35) — frame 0 of Sea animation
+        sea_base = _make_cell(8, 35, tmp_path=tmp_path)
+        # A plain cell to ensure type batches are non-empty
+        plain_cell = _make_cell(0, 0, tmp_path=tmp_path)
+
+        cells = [sea_base, plain_cell]
+        batches = reskin_tiles.create_typed_batches(cells, tmp_path)
+
+        all_batch_ids = set()
+        for b in batches:
+            for c in b["cells"]:
+                all_batch_ids.add(c["id"])
+
+        assert sea_base["id"] not in all_batch_ids, (
+            "Sea base frame (8, 35) should be excluded from type batches"
+        )
+        assert plain_cell["id"] in all_batch_ids, (
+            "Plain cell should be in type batches"
+        )
+
+    def test_animation_non_base_frames_excluded(self, tmp_path):
+        """Non-base animation frames should NOT appear in type batches."""
+        # Sea non-base frame: (8, 38) — frame 1 of Sea animation
+        sea_frame = _make_cell(8, 38, tmp_path=tmp_path)
+        # Computer non-base frame: (0, 32) — frame 1 of Computer animation
+        comp_frame = _make_cell(0, 32, tmp_path=tmp_path)
+        # Lightning non-base frame: (10, 1) — frame 1 of Lightning animation
+        lightning_frame = _make_cell(10, 1, tmp_path=tmp_path)
+        # A plain cell for contrast
+        plain_cell = _make_cell(1, 0, tmp_path=tmp_path)
+
+        cells = [sea_frame, comp_frame, lightning_frame, plain_cell]
+        batches = reskin_tiles.create_typed_batches(cells, tmp_path)
+
+        all_batch_ids = set()
+        for b in batches:
+            for c in b["cells"]:
+                all_batch_ids.add(c["id"])
+
+        assert sea_frame["id"] not in all_batch_ids, (
+            "Sea non-base frame should be excluded from type batches"
+        )
+        assert comp_frame["id"] not in all_batch_ids, (
+            "Computer non-base frame should be excluded from type batches"
+        )
+        assert lightning_frame["id"] not in all_batch_ids, (
+            "Lightning non-base frame should be excluded from type batches"
+        )
+        assert plain_cell["id"] in all_batch_ids, (
+            "Plain cell should still be in type batches"
+        )
