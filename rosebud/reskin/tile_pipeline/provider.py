@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
@@ -18,6 +20,195 @@ from .prompts import (
     TILE_TYPE_HINTS,
     build_cell_legend,
 )
+
+MODEL_NAME = "gemini-3.1-flash-image-preview"
+PROMPT_TEMPLATE_VERSION = "minimal-cache-v1"
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file(path: str | Path | None) -> str | None:
+    if path is None:
+        return None
+    return _sha256_bytes(Path(path).read_bytes())
+
+
+def _resolve_anchor_paths(
+    tile_type: str,
+    anchor_paths: dict[str, str] | None,
+) -> list[str]:
+    if not anchor_paths:
+        return []
+
+    batch_anchor_paths: list[str] = []
+    type_anchor_key = ANCHOR_INHERITANCE.get(tile_type, tile_type)
+    type_anchor = anchor_paths.get(type_anchor_key)
+    if not type_anchor:
+        return batch_anchor_paths
+
+    batch_anchor_paths.append(type_anchor)
+    plain_anchor = anchor_paths.get("plain")
+    water_anchor = anchor_paths.get("water")
+
+    if type_anchor_key in ("water", "river"):
+        if plain_anchor and plain_anchor != type_anchor:
+            batch_anchor_paths.append(plain_anchor)
+    elif type_anchor_key == "pier":
+        if water_anchor and water_anchor != type_anchor:
+            batch_anchor_paths.append(water_anchor)
+        if plain_anchor and plain_anchor != type_anchor:
+            batch_anchor_paths.append(plain_anchor)
+    elif type_anchor_key in ("street", "plain", "rail"):
+        if plain_anchor and plain_anchor != type_anchor:
+            batch_anchor_paths.append(plain_anchor)
+    elif type_anchor_key in ("mountain", "forest", "campsite"):
+        if plain_anchor and plain_anchor != type_anchor:
+            batch_anchor_paths.append(plain_anchor)
+
+    return batch_anchor_paths
+
+
+def _build_batch_cache_context(
+    batch_meta: dict[str, Any],
+    theme: dict[str, Any],
+    batch_anchor_paths: list[str],
+    style_sheet_path: str | None,
+) -> dict[str, Any]:
+    prompt_bundle_hash = _sha256_bytes(
+        json.dumps(
+            {
+                "anchor": ANCHOR_PROMPT_TEMPLATE,
+                "anim": ANIM_BATCH_PROMPT_TEMPLATE,
+                "batch": BATCH_PROMPT_TEMPLATE,
+                "multi": MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    )
+    resolved_anchor_hashes = [
+        _sha256_file(path)
+        for path in batch_anchor_paths
+    ]
+
+    context = {
+        "model_name": MODEL_NAME,
+        "prompt_template_version": PROMPT_TEMPLATE_VERSION,
+        "prompt_bundle_hash": prompt_bundle_hash,
+        "theme_name": theme.get("name"),
+        "theme_prompt": theme.get("prompt", ""),
+        "tile_type": batch_meta["tile_type"],
+        "is_animation_batch": batch_meta.get("is_animation_batch", False),
+        "animation_name": batch_meta.get("anim_name"),
+        "batch_image_sha256": _sha256_file(batch_meta["path"]),
+        "cell_ids": [cell["id"] for cell in batch_meta["cells"]],
+        "cell_positions": [[cell["col"], cell["row"]] for cell in batch_meta["cells"]],
+        "anchor_hashes": resolved_anchor_hashes,
+        "style_sheet_sha256": _sha256_file(style_sheet_path),
+    }
+    return context
+
+
+def _build_batch_cache_entry(
+    batch_meta: dict[str, Any],
+    theme: dict[str, Any],
+    reskinned_dir: Path,
+    anchor_paths: dict[str, str] | None = None,
+    style_sheet_path: str | None = None,
+) -> dict[str, Any]:
+    batch_anchor_paths = _resolve_anchor_paths(batch_meta["tile_type"], anchor_paths)
+    context = _build_batch_cache_context(
+        batch_meta,
+        theme,
+        batch_anchor_paths,
+        style_sheet_path,
+    )
+    cache_key = _sha256_bytes(
+        json.dumps(context, sort_keys=True).encode("utf-8")
+    )
+
+    cache_dir = reskinned_dir / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    identity = _sha256_bytes(
+        json.dumps(
+            {
+                "tile_type": batch_meta["tile_type"],
+                "is_animation_batch": batch_meta.get("is_animation_batch", False),
+                "animation_name": batch_meta.get("anim_name"),
+                "cell_ids": [cell["id"] for cell in batch_meta["cells"]],
+                "cell_positions": [[cell["col"], cell["row"]] for cell in batch_meta["cells"]],
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    )
+    index_dir = cache_dir / "index"
+    index_dir.mkdir(parents=True, exist_ok=True)
+    return {
+        "cache_key": cache_key,
+        "identity": identity,
+        "context": context,
+        "batch_anchor_paths": batch_anchor_paths,
+        "image_path": cache_dir / f"{cache_key}.png",
+        "meta_path": cache_dir / f"{cache_key}.json",
+        "index_path": index_dir / f"{identity}.json",
+    }
+
+
+def _describe_context_changes(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+) -> str:
+    changed_fields = [
+        key
+        for key in sorted(current.keys())
+        if previous.get(key) != current.get(key)
+    ]
+    if not changed_fields:
+        return "cache miss (no exact-match entry)"
+    return f"cache miss (changed: {', '.join(changed_fields)})"
+
+
+def load_cached_batch_image(
+    batch_meta: dict[str, Any],
+    theme: dict[str, Any],
+    reskinned_dir: Path,
+    anchor_paths: dict[str, str] | None = None,
+    style_sheet_path: str | None = None,
+    fresh: bool = False,
+) -> tuple[dict[str, Any], Image.Image | None, str]:
+    entry = _build_batch_cache_entry(
+        batch_meta,
+        theme,
+        reskinned_dir,
+        anchor_paths=anchor_paths,
+        style_sheet_path=style_sheet_path,
+    )
+    if fresh:
+        return entry, None, "cache bypassed (--fresh)"
+
+    image_path = entry["image_path"]
+    meta_path = entry["meta_path"]
+    if not image_path.exists() or not meta_path.exists():
+        if entry["index_path"].exists():
+            try:
+                previous_meta = json.loads(entry["index_path"].read_text())
+                previous_context = previous_meta.get("context", {})
+                return entry, None, _describe_context_changes(previous_context, entry["context"])
+            except json.JSONDecodeError:
+                return entry, None, "cache miss (invalid diagnostic metadata)"
+        return entry, None, "cache miss (no exact-match entry)"
+
+    try:
+        saved_meta = json.loads(meta_path.read_text())
+    except json.JSONDecodeError:
+        return entry, None, "cache miss (invalid metadata)"
+
+    if saved_meta.get("cache_key") != entry["cache_key"]:
+        return entry, None, "cache miss (cache key mismatch)"
+
+    return entry, Image.open(image_path).convert("RGBA"), "cache hit (exact visual input match)"
+
 
 def reskin_batch_gemini(
     batch_path: str,
@@ -147,7 +338,7 @@ def reskin_batch_gemini(
     for attempt in range(3):
         try:
             response = client.models.generate_content(
-                model="gemini-3.1-flash-image-preview",
+                model=MODEL_NAME,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=["IMAGE", "TEXT"],
@@ -176,6 +367,7 @@ def _reskin_batches(
     workers: int,
     anchor_paths: dict[str, str] | None = None,
     style_sheet_path: str | None = None,
+    fresh: bool = False,
 ) -> list[tuple[dict, Image.Image]]:
     """Reskin batches using parallel workers."""
     import concurrent.futures
@@ -187,83 +379,28 @@ def _reskin_batches(
     def process_batch(batch_meta: dict) -> list[tuple[dict, Image.Image]]:
         batch_id = batch_meta["batch_id"]
         tile_type = batch_meta["tile_type"]
-        reskinned_path = reskinned_dir / f"{batch_id}_reskinned.png"
-        meta_path = reskinned_dir / f"{batch_id}_reskinned.meta.json"
+        entry, reskinned_img, cache_message = load_cached_batch_image(
+            batch_meta,
+            theme,
+            reskinned_dir,
+            anchor_paths=anchor_paths,
+            style_sheet_path=style_sheet_path,
+            fresh=fresh,
+        )
 
-        # Build fingerprint of current batch layout
-        current_fp = {
-            "n_cells": len(batch_meta["cells"]),
-            "canvas_w": batch_meta["canvas_w"],
-            "canvas_h": batch_meta["canvas_h"],
-            "cell_positions": [
-                [c["col"], c["row"]] for c in batch_meta["cells"]
-            ],
-        }
-
-        cache_valid = False
-        if reskinned_path.exists() and meta_path.exists():
-            try:
-                saved_fp = json.loads(meta_path.read_text())
-                if (saved_fp.get("n_cells") == current_fp["n_cells"]
-                        and saved_fp.get("canvas_w") == current_fp["canvas_w"]
-                        and saved_fp.get("canvas_h") == current_fp["canvas_h"]
-                        and saved_fp.get("cell_positions") == current_fp["cell_positions"]):
-                    cache_valid = True
-                    reskinned_img = Image.open(reskinned_path).convert("RGBA")
-                    with print_lock:
-                        print(f"  {batch_id}: Using cached result")
-                else:
-                    with print_lock:
-                        print(f"  {batch_id}: Stale cache (layout changed), regenerating")
-            except (json.JSONDecodeError, KeyError):
-                with print_lock:
-                    print(f"  {batch_id}: Invalid cache metadata, regenerating")
-        elif reskinned_path.exists():
+        if reskinned_img is not None:
             with print_lock:
-                print(f"  {batch_id}: No cache metadata, regenerating")
-
-        if not cache_valid:
+                print(f"  {batch_id}: {cache_message}")
+        else:
             with print_lock:
+                print(f"  {batch_id}: {cache_message}")
                 print(
                     f"  {batch_id}: Sending to Gemini Flash "
                     f"({len(batch_meta['cells'])} {tile_type} cells)"
                 )
-            batch_anchor_paths = None
-            if anchor_paths:
-                # Use ANCHOR_INHERITANCE to find the right anchor for
-                # sub-types that don't generate their own.
-                type_anchor_key = ANCHOR_INHERITANCE.get(tile_type, tile_type)
-                type_anchor = anchor_paths.get(type_anchor_key)
-                if type_anchor:
-                    batch_anchor_paths = [type_anchor]
-                    # For transition types, include additional anchors so
-                    # Gemini can match adjacent-terrain colors exactly.
-                    plain_anchor = anchor_paths.get("plain")
-                    water_anchor = anchor_paths.get("water")
-                    if type_anchor_key in ("water", "river"):
-                        # Water/river/reef/sea_object/floatingedge:
-                        # add plain anchor for grass in coastlines/banks
-                        if plain_anchor and plain_anchor != type_anchor:
-                            batch_anchor_paths.append(plain_anchor)
-                    elif type_anchor_key == "pier":
-                        # Pier: add water anchor + plain anchor (borders touch both)
-                        if water_anchor and water_anchor != type_anchor:
-                            batch_anchor_paths.append(water_anchor)
-                        if plain_anchor and plain_anchor != type_anchor:
-                            batch_anchor_paths.append(plain_anchor)
-                    elif type_anchor_key in ("street", "plain", "rail"):
-                        # Street/trench/bridge/pipe/computer/lightning,
-                        # rail, and plain-inheriting types: add plain anchor
-                        # for grass context.
-                        if plain_anchor and plain_anchor != type_anchor:
-                            batch_anchor_paths.append(plain_anchor)
-                    elif type_anchor_key in ("mountain", "forest", "campsite"):
-                        # Mountain, Forest, Campsite: add plain anchor for grass
-                        if plain_anchor and plain_anchor != type_anchor:
-                            batch_anchor_paths.append(plain_anchor)
             reskinned_img = reskin_batch_gemini(
                 batch_meta["path"], theme, batch_id, tile_type,
-                anchor_paths=batch_anchor_paths,
+                anchor_paths=entry["batch_anchor_paths"],
                 cells=batch_meta.get("cells"),
                 style_sheet_path=style_sheet_path,
                 is_animation_batch=batch_meta.get("is_animation_batch", False),
@@ -272,8 +409,25 @@ def _reskin_batches(
                 with print_lock:
                     print(f"  {batch_id}: FAILED — skipping")
                 return []
-            reskinned_img.save(reskinned_path)
-            meta_path.write_text(json.dumps(current_fp))
+            reskinned_img.save(entry["image_path"])
+            entry["meta_path"].write_text(
+                json.dumps(
+                    {
+                        "cache_key": entry["cache_key"],
+                        "context": entry["context"],
+                    },
+                    indent=2,
+                ) + "\n"
+            )
+            entry["index_path"].write_text(
+                json.dumps(
+                    {
+                        "cache_key": entry["cache_key"],
+                        "context": entry["context"],
+                    },
+                    indent=2,
+                ) + "\n"
+            )
 
         extracted = extract_from_reskinned(reskinned_img, batch_meta)
         with print_lock:

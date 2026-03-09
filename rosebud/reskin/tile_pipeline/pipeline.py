@@ -5,8 +5,6 @@ import os
 import sys
 from pathlib import Path
 
-from PIL import Image
-
 from .anchors import generate_anchors, generate_style_reference_sheet
 from .assemble import reassemble_atlas, update_reskin_manifest
 from .batching import build_animation_batches, create_typed_batches
@@ -23,7 +21,7 @@ from .models import (
 from .postprocess import (
     extract_from_reskinned,
 )
-from .provider import reskin_batches
+from .provider import load_cached_batch_image, reskin_batches
 
 
 def load_env_and_theme(config: RunConfig) -> dict:
@@ -99,17 +97,32 @@ def batch_stage(config: RunConfig, artifacts: RunArtifacts) -> RunArtifacts:
     return artifacts
 
 
-def _load_cached_non_target_batches(target_batches: list[TileBatch], all_batches: list[TileBatch], reskinned_dir: Path) -> list[ReskinnedCell]:
+def _load_cached_non_target_batches(
+    target_batches: list[TileBatch],
+    all_batches: list[TileBatch],
+    theme: dict,
+    reskinned_dir: Path,
+    anchor_paths: dict[str, str] | None = None,
+    style_sheet_path: str | None = None,
+) -> tuple[list[ReskinnedCell], list[str]]:
     target_ids = {batch.batch_id for batch in target_batches}
     other_batches = [batch for batch in all_batches if batch.batch_id not in target_ids]
     results: list[ReskinnedCell] = []
+    missing: list[str] = []
     for batch in other_batches:
-        rp = reskinned_dir / f'{batch.batch_id}_reskinned.png'
-        if rp.exists():
-            reskinned_img = Image.open(rp).convert('RGBA')
-            extracted = extract_from_reskinned(reskinned_img, batch.to_legacy_dict())
-            results.extend(ReskinnedCell(TileCell.from_legacy_dict(cell), image) for cell, image in extracted)
-    return results
+        _, reskinned_img, _ = load_cached_batch_image(
+            batch.to_legacy_dict(),
+            theme,
+            reskinned_dir,
+            anchor_paths=anchor_paths,
+            style_sheet_path=style_sheet_path,
+        )
+        if reskinned_img is None:
+            missing.append(batch.batch_id)
+            continue
+        extracted = extract_from_reskinned(reskinned_img, batch.to_legacy_dict())
+        results.extend(ReskinnedCell(TileCell.from_legacy_dict(cell), image) for cell, image in extracted)
+    return results, missing
 
 
 def reskin_stage(config: RunConfig, theme: dict, artifacts: RunArtifacts) -> RunArtifacts:
@@ -119,13 +132,6 @@ def reskin_stage(config: RunConfig, theme: dict, artifacts: RunArtifacts) -> Run
     print('\n--- Stage 2: Full reskin + reassemble ---')
     reskinned_dir = artifacts.work_dir / 'reskinned'
     reskinned_dir.mkdir(exist_ok=True)
-
-    if config.fresh:
-        for file in reskinned_dir.iterdir():
-            if config.type_only and config.type_only not in file.name:
-                continue
-            file.unlink()
-        print('  Cleared cached reskinned batches')
 
     if config.stage == '2' and not artifacts.anchors.paths:
         anchor_paths = {}
@@ -160,6 +166,11 @@ def reskin_stage(config: RunConfig, theme: dict, artifacts: RunArtifacts) -> Run
     else:
         print(f'\n  Reskinning {len(target_batches)} batches with Gemini Flash...')
 
+    is_partial_rerun = len(target_batches) != len(artifacts.batches)
+    if config.fresh and is_partial_rerun:
+        print('ERROR: --fresh cannot be combined with partial reruns because non-target batches would fall back to original art. Run a full fresh reskin or rerun without --fresh.')
+        sys.exit(1)
+
     extracted = reskin_batches(
         [batch.to_legacy_dict() for batch in target_batches],
         theme,
@@ -167,11 +178,26 @@ def reskin_stage(config: RunConfig, theme: dict, artifacts: RunArtifacts) -> Run
         config.workers,
         anchor_paths=artifacts.anchors.paths or None,
         style_sheet_path=artifacts.anchors.style_reference_sheet,
+        fresh=config.fresh,
     )
     reskinned_cells = [ReskinnedCell(TileCell.from_legacy_dict(cell), image) for cell, image in extracted]
 
     if config.type_only or config.anim_only:
-        reskinned_cells.extend(_load_cached_non_target_batches(target_batches, artifacts.batches, reskinned_dir))
+        cached_cells, missing_batches = _load_cached_non_target_batches(
+            target_batches,
+            artifacts.batches,
+            theme,
+            reskinned_dir,
+            anchor_paths=artifacts.anchors.paths or None,
+            style_sheet_path=artifacts.anchors.style_reference_sheet,
+        )
+        if missing_batches:
+            print(
+                'ERROR: Partial rerun requires exact-match cached results for non-target batches. '
+                f'Missing cache entries for: {", ".join(missing_batches)}'
+            )
+            sys.exit(1)
+        reskinned_cells.extend(cached_cells)
 
     artifacts.reskinned_cells = reskinned_cells
     return artifacts

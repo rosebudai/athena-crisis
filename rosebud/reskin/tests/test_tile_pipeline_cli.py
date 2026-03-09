@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+from PIL import Image
+
 from rosebud.reskin.tile_pipeline.cli import build_parser, config_from_args
 from rosebud.reskin.tile_pipeline.models import RunArtifacts, RunConfig, TileBatch
 from rosebud.reskin.tile_pipeline import pipeline
@@ -105,3 +108,66 @@ def test_tile_batch_round_trip_preserves_grid_positions():
 
     assert round_tripped['cells'][0]['grid_row'] == 2
     assert round_tripped['cells'][0]['grid_col'] == 3
+
+
+def test_reskin_stage_rejects_fresh_partial_reruns(tmp_path):
+    batch_path = tmp_path / 'batch.png'
+    Image.new('RGBA', (24, 24), (1, 2, 3, 255)).save(batch_path)
+    config = RunConfig(
+        atlas='Tiles0',
+        theme_name='cozy',
+        fresh=True,
+        type_only='water',
+    )
+    artifacts = RunArtifacts(
+        work_dir=tmp_path,
+        batches=[
+            TileBatch.from_legacy_dict({
+                'batch_id': 'batch_000_water',
+                'tile_type': 'water',
+                'path': str(batch_path),
+                'cells': [],
+            }),
+            TileBatch.from_legacy_dict({
+                'batch_id': 'batch_001_plain',
+                'tile_type': 'plain',
+                'path': str(batch_path),
+                'cells': [],
+            }),
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        pipeline.reskin_stage(config, {'name': 'cozy', 'prompt': 'cozy autumn'}, artifacts)
+
+
+def test_reskin_stage_requires_exact_match_cache_for_non_target_batches(monkeypatch, tmp_path):
+    batch_path = tmp_path / 'batch.png'
+    Image.new('RGBA', (24, 24), (1, 2, 3, 255)).save(batch_path)
+    config = RunConfig(
+        atlas='Tiles0',
+        theme_name='cozy',
+        type_only='water',
+    )
+    artifacts = RunArtifacts(
+        work_dir=tmp_path,
+        batches=[
+            TileBatch.from_legacy_dict({
+                'batch_id': 'batch_000_water',
+                'tile_type': 'water',
+                'path': str(batch_path),
+                'cells': [],
+            }),
+            TileBatch.from_legacy_dict({
+                'batch_id': 'batch_001_plain',
+                'tile_type': 'plain',
+                'path': str(batch_path),
+                'cells': [],
+            }),
+        ],
+    )
+
+    monkeypatch.setattr(pipeline, 'reskin_batches', lambda *args, **kwargs: [])
+
+    with pytest.raises(SystemExit):
+        pipeline.reskin_stage(config, {'name': 'cozy', 'prompt': 'cozy autumn'}, artifacts)
