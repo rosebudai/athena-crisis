@@ -21,9 +21,7 @@ from .models import (
     TileCell,
 )
 from .postprocess import (
-    composite_feature_backgrounds,
     extract_from_reskinned,
-    harmonize_transitions,
 )
 from .provider import reskin_batches
 
@@ -81,14 +79,6 @@ def anchor_stage(config: RunConfig, theme: dict, artifacts: RunArtifacts) -> Run
 
     print('\n--- Stage 1: Generating style reference sheet ---')
     style_sheet_path = str(generate_style_reference_sheet(anchor_paths, artifacts.work_dir))
-
-    if not config.skip_composite and artifacts.atlas_path is not None:
-        print('\n--- Stage 1: Compositing feature backgrounds ---')
-        composite_feature_backgrounds(
-            [cell.to_legacy_dict() for cell in artifacts.cells],
-            anchor_paths,
-            artifacts.atlas_path,
-        )
 
     artifacts.anchors = AnchorSet(paths=anchor_paths, style_reference_sheet=style_sheet_path)
     return artifacts
@@ -182,14 +172,6 @@ def reskin_stage(config: RunConfig, theme: dict, artifacts: RunArtifacts) -> Run
 
     if config.type_only or config.anim_only:
         reskinned_cells.extend(_load_cached_non_target_batches(target_batches, artifacts.batches, reskinned_dir))
-
-    if not config.skip_harmonize and artifacts.atlas_path is not None:
-        print('\n  Harmonizing transition tile colors...')
-        harmonized = harmonize_transitions(
-            [(entry.cell.to_legacy_dict(), entry.image) for entry in reskinned_cells],
-            artifacts.atlas_path,
-        )
-        reskinned_cells = [ReskinnedCell(TileCell.from_legacy_dict(cell), image) for cell, image in harmonized]
 
     artifacts.reskinned_cells = reskinned_cells
     return artifacts

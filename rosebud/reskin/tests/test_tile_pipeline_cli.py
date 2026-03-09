@@ -16,8 +16,6 @@ def test_config_from_args_maps_cli_fields():
         '--type-only', 'water',
         '--workers', '3',
         '--stage', '2',
-        '--skip-harmonize',
-        '--skip-composite',
         '--anim-only', 'River',
         '--debug-atlas',
     ])
@@ -32,8 +30,6 @@ def test_config_from_args_maps_cli_fields():
         fresh=False,
         workers=3,
         stage='2',
-        skip_harmonize=True,
-        skip_composite=True,
         anim_only='River',
         debug_atlas=True,
     )

@@ -160,7 +160,7 @@ class TestCreateTypedBatches:
 
 
 # ---------------------------------------------------------------------------
-# normalize_colors_by_type
+# animation metadata coverage
 # ---------------------------------------------------------------------------
 
 class TestFullBatching:
@@ -237,7 +237,7 @@ class TestFullBatching:
 
 
 # ---------------------------------------------------------------------------
-# composite_feature_backgrounds
+# animation cell exclusion
 # ---------------------------------------------------------------------------
 
 class TestAnimationCellExclusion:

@@ -16,8 +16,6 @@ class RunConfig:
     fresh: bool = False
     workers: int = 16
     stage: str = "full"
-    skip_harmonize: bool = False
-    skip_composite: bool = False
     anim_only: str | None = None
     debug_atlas: bool = False
 

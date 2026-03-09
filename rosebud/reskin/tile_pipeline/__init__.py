@@ -10,7 +10,7 @@ from .debug import _draw_outlined_text, generate_debug_atlas
 from .extract import download_atlas, extract_cells
 from .models import AnchorSet, AnimationMetadata, ReskinnedCell, RunArtifacts, RunConfig, TileBatch, TileCell
 from .pipeline import assemble_stage, anchor_stage, batch_stage, debug_stage, extract_stage, load_env_and_theme, prepare_run, reskin_stage, run_pipeline
-from .postprocess import _alpha_similarity, _lab_to_rgb, _rgb_to_hsv_arrays, _rgb_to_lab, _shift_masked_pixels, composite_feature_backgrounds, copy_base_frames_to_anim_frames, extract_from_reskinned, harmonize_transitions, normalize_colors_by_type
+from .postprocess import extract_from_reskinned
 from .prompts import *
 from .provider import _reskin_batches, reskin_batch_gemini, reskin_batches
 
