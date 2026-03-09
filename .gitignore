@@ -25,6 +25,7 @@ tsconfig.tsbuildinfo
 
 # Claude specs
 .claude/specs/
+.specs/
 
 # Codegen
 apollo/EncodedActions.tsx
