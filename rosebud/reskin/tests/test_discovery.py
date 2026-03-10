@@ -80,3 +80,39 @@ def test_category_filter(tmp_path):
         assert asset.category == "unit-sprite"
     unit_names = {a.name for a in unit_assets}
     assert "Buildings" not in unit_names
+
+
+def test_multi_category_filter_includes_structures(tmp_path):
+    cache_dir = str(tmp_path / "cache")
+    names = parse_sprite_variants(REPO_ROOT)
+    os.makedirs(cache_dir, exist_ok=True)
+    for name in names:
+        open(os.path.join(cache_dir, f"{name}.png"), "w").close()
+    open(os.path.join(cache_dir, "Structures.png"), "w").close()
+
+    assets = discover_assets(
+        REPO_ROOT,
+        category=["unit-sprite", "building"],
+        cache_dir=cache_dir,
+    )
+
+    asset_names = {asset.name for asset in assets}
+    assert "Units-Infantry" in asset_names
+    assert "Buildings" in asset_names
+    assert "Structures" in asset_names
+    assert "Portraits" not in asset_names
+
+
+def test_name_filter_avoids_full_catalog_downloads(tmp_path):
+    cache_dir = str(tmp_path / "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    open(os.path.join(cache_dir, "Units-Infantry.png"), "w").close()
+
+    assets = discover_assets(
+        REPO_ROOT,
+        category="unit-sprite",
+        names=["Units-Infantry"],
+        cache_dir=cache_dir,
+    )
+
+    assert [asset.name for asset in assets] == ["Units-Infantry"]

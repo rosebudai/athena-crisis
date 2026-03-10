@@ -30,6 +30,8 @@ def _make_batch_meta(tmp_path: Path, batch_id: str = "batch_000_plain") -> dict:
     return {
         "batch_id": batch_id,
         "tile_type": "plain",
+        "batch_family": "plain",
+        "layout_strategy": "packed",
         "path": str(batch_path),
         "cells": [
             {
@@ -54,6 +56,111 @@ def _make_batch_meta(tmp_path: Path, batch_id: str = "batch_000_plain") -> dict:
 
 def _make_reference_image(path: Path, color: tuple[int, int, int, int]) -> None:
     Image.new("RGBA", (24, 24), color).save(path)
+
+
+def _make_preview_image(path: Path, color: tuple[int, int, int, int]) -> None:
+    Image.new("RGBA", (48, 48), color).save(path)
+
+
+def test_transition_reference_bundles_expand_anchor_context():
+    anchor_paths = {
+        "plain": "/tmp/plain.png",
+        "water": "/tmp/water.png",
+        "river": "/tmp/river.png",
+        "pier": "/tmp/pier.png",
+    }
+
+    assert provider._resolve_anchor_paths("water", anchor_paths) == [
+        "/tmp/water.png",
+        "/tmp/plain.png",
+        "/tmp/river.png",
+    ]
+    assert provider._resolve_anchor_paths("river", anchor_paths) == [
+        "/tmp/river.png",
+        "/tmp/water.png",
+        "/tmp/plain.png",
+    ]
+    assert provider._resolve_anchor_paths("pier", anchor_paths) == [
+        "/tmp/pier.png",
+        "/tmp/water.png",
+        "/tmp/plain.png",
+    ]
+    assert provider._resolve_anchor_paths("floatingedge", anchor_paths) == [
+        "/tmp/water.png",
+        "/tmp/plain.png",
+        "/tmp/river.png",
+        "/tmp/pier.png",
+    ]
+
+
+def test_water_derived_transition_types_get_expanded_context():
+    anchor_paths = {
+        "plain": "/tmp/plain.png",
+        "water": "/tmp/water.png",
+    }
+
+    assert provider._resolve_anchor_paths("reef", anchor_paths) == [
+        "/tmp/water.png",
+        "/tmp/plain.png",
+    ]
+    assert provider._resolve_anchor_paths("sea_object", anchor_paths) == [
+        "/tmp/water.png",
+        "/tmp/plain.png",
+    ]
+
+
+def test_non_transition_types_keep_existing_simple_routing():
+    anchor_paths = {
+        "plain": "/tmp/plain.png",
+        "street": "/tmp/street.png",
+        "mountain": "/tmp/mountain.png",
+    }
+
+    assert provider._resolve_anchor_paths("street", anchor_paths) == [
+        "/tmp/street.png",
+        "/tmp/plain.png",
+    ]
+    assert provider._resolve_anchor_paths("mountain", anchor_paths) == [
+        "/tmp/mountain.png",
+        "/tmp/plain.png",
+    ]
+    assert provider._resolve_anchor_paths("teleporter", anchor_paths) == []
+
+
+def test_build_batch_cache_entry_identity_changes_when_batch_image_changes(tmp_path):
+    theme = {"name": "cozy", "prompt": "cozy autumn"}
+    batch_meta = _make_batch_meta(tmp_path)
+    reskinned_dir = tmp_path / "reskinned"
+
+    entry_before = provider._build_batch_cache_entry(batch_meta, theme, reskinned_dir)
+    Image.new("RGBA", (batch_meta["canvas_w"] * 4, batch_meta["canvas_h"] * 4), (9, 8, 7, 255)).save(
+        batch_meta["path"]
+    )
+    entry_after = provider._build_batch_cache_entry(batch_meta, theme, reskinned_dir)
+
+    assert entry_before["identity"] != entry_after["identity"]
+
+
+def test_build_batch_cache_entry_identity_changes_when_preview_changes(tmp_path):
+    theme = {"name": "cozy", "prompt": "cozy autumn"}
+    batch_meta = _make_batch_meta(tmp_path)
+    preview_path = tmp_path / "preview.png"
+    _make_preview_image(preview_path, (11, 22, 33, 255))
+    batch_meta = {
+        **batch_meta,
+        "preview_path": str(preview_path),
+        "is_animation_batch": True,
+        "anim_name": "Island",
+        "batch_family": "sea_object_island_anim",
+        "layout_strategy": "frame_strip",
+    }
+    reskinned_dir = tmp_path / "reskinned"
+
+    entry_before = provider._build_batch_cache_entry(batch_meta, theme, reskinned_dir)
+    _make_preview_image(preview_path, (44, 55, 66, 255))
+    entry_after = provider._build_batch_cache_entry(batch_meta, theme, reskinned_dir)
+
+    assert entry_before["identity"] != entry_after["identity"]
 
 
 def test_reskin_batches_reuses_exact_match_cache(tmp_path, monkeypatch):
@@ -230,6 +337,63 @@ def test_reskin_batches_invalidates_cache_when_prompt_version_changes(tmp_path, 
     assert len(calls) == 2
 
 
+def test_reskin_batches_invalidates_cache_when_batch_family_changes(tmp_path, monkeypatch):
+    theme = {"name": "cozy", "prompt": "cozy autumn"}
+    batch_meta = _make_batch_meta(tmp_path)
+    reskinned_dir = tmp_path / "reskinned"
+    calls: list[str] = []
+
+    def fake_reskin(batch_path, *args, **kwargs):
+        calls.append(batch_path)
+        return Image.open(batch_path).convert("RGBA")
+
+    monkeypatch.setattr(provider, "reskin_batch_gemini", fake_reskin)
+
+    provider.reskin_batches([batch_meta], theme, reskinned_dir, workers=1)
+    provider.reskin_batches(
+        [
+            {
+                **batch_meta,
+                "batch_family": "plain_variant_family",
+            },
+        ],
+        theme,
+        reskinned_dir,
+        workers=1,
+    )
+
+    assert len(calls) == 2
+
+
+def test_reskin_batches_invalidates_cache_when_preview_changes(tmp_path, monkeypatch):
+    theme = {"name": "cozy", "prompt": "cozy autumn"}
+    batch_meta = _make_batch_meta(tmp_path)
+    preview_path = tmp_path / "preview.png"
+    _make_preview_image(preview_path, (11, 22, 33, 255))
+    batch_meta = {
+        **batch_meta,
+        "preview_path": str(preview_path),
+        "is_animation_batch": True,
+        "anim_name": "Island",
+        "batch_family": "sea_object_island_anim",
+        "layout_strategy": "frame_strip",
+    }
+    reskinned_dir = tmp_path / "reskinned"
+    calls: list[str] = []
+
+    def fake_reskin(batch_path, *args, **kwargs):
+        calls.append(batch_path)
+        return Image.open(batch_path).convert("RGBA")
+
+    monkeypatch.setattr(provider, "reskin_batch_gemini", fake_reskin)
+
+    provider.reskin_batches([batch_meta], theme, reskinned_dir, workers=1)
+    _make_preview_image(preview_path, (44, 55, 66, 255))
+    provider.reskin_batches([batch_meta], theme, reskinned_dir, workers=1)
+
+    assert len(calls) == 2
+
+
 def test_reskin_batches_fresh_bypasses_cache_reads(tmp_path, monkeypatch):
     theme = {"name": "cozy", "prompt": "cozy autumn"}
     batch_meta = _make_batch_meta(tmp_path)
@@ -277,3 +441,71 @@ def test_load_cached_batch_image_reports_changed_inputs(tmp_path):
     assert image is None
     assert "theme_prompt" in message
     assert "style_sheet_sha256" in message
+
+
+def test_load_cached_batch_image_reports_changed_batch_family(tmp_path):
+    theme = {"name": "cozy", "prompt": "cozy autumn"}
+    batch_meta = _make_batch_meta(tmp_path)
+    reskinned_dir = tmp_path / "reskinned"
+
+    entry = provider._build_batch_cache_entry(batch_meta, theme, reskinned_dir)
+    entry["index_path"].write_text(
+        provider.json.dumps(
+            {
+                "cache_key": "old",
+                "context": {
+                    **entry["context"],
+                    "batch_family": "plain_previous_family",
+                },
+            },
+            indent=2,
+        ) + "\n"
+    )
+
+    _, image, message = provider.load_cached_batch_image(
+        batch_meta,
+        theme,
+        reskinned_dir,
+    )
+
+    assert image is None
+    assert "batch_family" in message
+
+
+def test_load_cached_batch_image_reports_changed_preview(tmp_path):
+    theme = {"name": "cozy", "prompt": "cozy autumn"}
+    batch_meta = _make_batch_meta(tmp_path)
+    preview_path = tmp_path / "preview.png"
+    _make_preview_image(preview_path, (11, 22, 33, 255))
+    batch_meta = {
+        **batch_meta,
+        "preview_path": str(preview_path),
+        "is_animation_batch": True,
+        "anim_name": "Island",
+        "batch_family": "sea_object_island_anim",
+        "layout_strategy": "frame_strip",
+    }
+    reskinned_dir = tmp_path / "reskinned"
+
+    entry = provider._build_batch_cache_entry(batch_meta, theme, reskinned_dir)
+    entry["index_path"].write_text(
+        provider.json.dumps(
+            {
+                "cache_key": "old",
+                "context": {
+                    **entry["context"],
+                    "preview_image_sha256": "old-preview",
+                },
+            },
+            indent=2,
+        ) + "\n"
+    )
+
+    _, image, message = provider.load_cached_batch_image(
+        batch_meta,
+        theme,
+        reskinned_dir,
+    )
+
+    assert image is None
+    assert "preview_image_sha256" in message

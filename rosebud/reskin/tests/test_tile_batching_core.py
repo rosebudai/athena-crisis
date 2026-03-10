@@ -110,6 +110,8 @@ class TestCreateTypedBatches:
         assert "cells" in b
         assert "path" in b
         assert "scale_factor" in b
+        assert "batch_family" in b
+        assert "layout_strategy" in b
 
     def test_grid_cell_positions(self, tmp_path):
         """Cells in a batch should have valid grid_row and grid_col."""
@@ -126,10 +128,7 @@ class TestCreateTypedBatches:
             assert 0 <= c["grid_row"]
 
     def test_animation_cells_excluded(self, tmp_path):
-        """ALL animation cells (base + frames) should be excluded from type batches.
-
-        Animation cells are now handled by build_animation_batches() instead.
-        """
+        """Animation cells are excluded from type batches."""
         cells = [
             _make_cell(0, 0, tmp_path=tmp_path, is_anim_frame=False),   # plain, included
             _make_cell(1, 0, tmp_path=tmp_path, is_anim_frame=False),   # plain, included
@@ -148,6 +147,65 @@ class TestCreateTypedBatches:
         assert "r035_c08" not in batch_ids  # water base excluded (Sea animation)
         assert "r038_c08" not in batch_ids  # animation frame excluded
         assert len(all_batch_cells) == 2
+
+    def test_assign_batch_family_is_deterministic_for_sea_object(self, tmp_path):
+        """Sea object cells should resolve to stable explicit batch families."""
+        cells = [
+            _make_cell(5, 22, tmp_path=tmp_path),
+            _make_cell(5, 23, tmp_path=tmp_path),
+            _make_cell(5, 24, tmp_path=tmp_path),
+            _make_cell(5, 25, tmp_path=tmp_path),
+            _make_cell(5, 26, tmp_path=tmp_path),
+            _make_cell(5, 27, tmp_path=tmp_path),
+        ]
+
+        families = {
+            cell["id"]: reskin_tiles.assign_batch_family(cell)
+            for cell in cells
+        }
+
+        assert families["r022_c05"] == "sea_object_iceberg_weeds_anim"
+        assert families["r023_c05"] == "sea_object_iceberg_weeds_anim"
+        assert families["r024_c05"] == "sea_object_island_anim"
+        assert families["r025_c05"] == "sea_object_island_anim"
+        assert families["r026_c05"] == "sea_object_gas_bubbles_anim"
+        assert families["r027_c05"] == "sea_object_gas_bubbles_anim"
+
+    def test_sea_object_animation_rows_stay_out_of_type_batches(self, tmp_path):
+        """Sea-object rows in the current atlas should be fully owned by animation families."""
+        cells = [
+            _make_cell(5, 22, tmp_path=tmp_path),
+            _make_cell(5, 23, tmp_path=tmp_path),
+            _make_cell(5, 24, tmp_path=tmp_path),
+            _make_cell(5, 25, tmp_path=tmp_path),
+            _make_cell(5, 26, tmp_path=tmp_path),
+            _make_cell(5, 27, tmp_path=tmp_path),
+        ]
+
+        sea_batches = [
+            b for b in reskin_tiles.create_typed_batches(cells, tmp_path)
+            if b["tile_type"] == "sea_object"
+        ]
+        assert sea_batches == []
+
+    def test_sea_object_variant_rows_gain_animation_metadata(self, tmp_path):
+        """Sea-object variant rows should get synthetic animation metadata for batching."""
+        cells = [
+            _make_cell(5, 24, tmp_path=tmp_path),
+            _make_cell(7, 25, tmp_path=tmp_path),
+            _make_cell(8, 27, tmp_path=tmp_path),
+        ]
+
+        static_cells, anim_cells, excluded = reskin_tiles._partition_cells_for_batching(cells)
+
+        assert static_cells == []
+        assert excluded == 3
+        assert anim_cells["Island"][0][0]["anim_cell_idx"] == 0
+        assert anim_cells["Island"][0][0]["anim_frame_idx"] == 0
+        assert anim_cells["Island"][2][0]["anim_cell_idx"] == 1
+        assert anim_cells["Island"][2][0]["anim_frame_idx"] == 2
+        assert anim_cells["GasBubbles"][3][0]["anim_cell_idx"] == 1
+        assert anim_cells["GasBubbles"][3][0]["anim_frame_idx"] == 3
 
     def test_all_anim_frames_excluded_yields_no_batches(self, tmp_path):
         """If all cells are animation frames, no batches should be created."""
@@ -241,8 +299,7 @@ class TestFullBatching:
 # ---------------------------------------------------------------------------
 
 class TestAnimationCellExclusion:
-    """Verify that animation cells (both base and non-base frames) are
-    properly excluded from type batches."""
+    """Verify that standard animation cells stay out of type batches."""
 
     def test_animation_base_frames_excluded_from_type_batches(self, tmp_path):
         """Base frames (frame 0) of animations should NOT appear in type batches."""
@@ -267,7 +324,7 @@ class TestAnimationCellExclusion:
         )
 
     def test_animation_non_base_frames_excluded(self, tmp_path):
-        """Non-base animation frames should NOT appear in type batches."""
+        """Non-base standard animation frames should NOT appear in type batches."""
         # Sea non-base frame: (8, 38) — frame 1 of Sea animation
         sea_frame = _make_cell(8, 38, tmp_path=tmp_path)
         # Computer non-base frame: (0, 32) — frame 1 of Computer animation
@@ -297,3 +354,14 @@ class TestAnimationCellExclusion:
         assert plain_cell["id"] in all_batch_ids, (
             "Plain cell should still be in type batches"
         )
+
+    def test_non_sea_animation_fallback_still_works(self, tmp_path):
+        """Standard animation exclusion should remain unchanged outside sea_object."""
+        sea_base = _make_cell(8, 35, tmp_path=tmp_path)
+        plain_cell = _make_cell(0, 0, tmp_path=tmp_path)
+
+        batches = reskin_tiles.create_typed_batches([sea_base, plain_cell], tmp_path)
+        all_batch_ids = {c["id"] for b in batches for c in b["cells"]}
+
+        assert sea_base["id"] not in all_batch_ids
+        assert plain_cell["id"] in all_batch_ids

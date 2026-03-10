@@ -8,7 +8,7 @@ import pytest
 from PIL import Image
 
 from reskin.providers.echo import EchoProvider
-from reskin.providers.fal_gemini import FalGeminiProvider
+from reskin.providers.nano_banana import NanoBananaProvider
 
 
 def _make_test_png(path, size=(64, 64), color="red"):
@@ -50,12 +50,11 @@ def test_echo_transform_grid_copies_file(tmp_path):
     assert img.size == (256, 256)
 
 
-def test_fal_gemini_requires_fal_key(monkeypatch):
-    """FalGeminiProvider should raise ValueError when FAL_KEY is not set."""
-    monkeypatch.delenv("FAL_KEY", raising=False)
-    # Patch fal_client to be available so we hit the FAL_KEY check
-    import reskin.providers.fal_gemini as fal_mod
-    monkeypatch.setattr(fal_mod, "fal_client", object())
+def test_nano_banana_requires_api_key(monkeypatch):
+    """NanoBananaProvider should raise ValueError when GEMINI_API_KEY is not set."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    import reskin.providers.nano_banana as banana_mod
+    monkeypatch.setattr(banana_mod, "genai", object())
 
-    with pytest.raises(ValueError, match="FAL_KEY"):
-        FalGeminiProvider()
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+        NanoBananaProvider()

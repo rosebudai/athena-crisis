@@ -3,7 +3,7 @@ import { Biome } from '@deities/athena/map/Biome.tsx';
 import { injectGlobal } from '@emotion/css';
 import paletteSwap, { HEX } from '@nkzw/palette-swap';
 import Variants from 'athena-crisis:asset-variants';
-import { applyTileOverrides } from 'athena-crisis:images';
+import { applyDirectSpriteOverrides, applyTileOverrides } from 'athena-crisis:images';
 import { AssetDomain, AssetVersion } from './AssetInfo.tsx';
 import BiomeVariants from './BiomeVariants.tsx';
 import VariantConfiguration, { SpriteVariantConfiguration } from './VariantConfiguration.tsx';
@@ -96,6 +96,7 @@ async function loadReskinSources(): Promise<void> {
     if (!response.ok) return;
     const data = (await response.json()) as {
       basePath?: string;
+      directSprites?: Record<string, string>;
       sprites?: string[];
       tiles?: Record<string, string>;
     };
@@ -105,6 +106,13 @@ async function loadReskinSources(): Promise<void> {
     }
     if (reskinSources.size > 0) {
       console.log(`[Reskin] Loaded ${reskinSources.size} sprite overrides from ${basePath}`);
+    }
+    if (data.directSprites) {
+      const directSpriteOverrides = new Map<string, string>();
+      for (const [name, path] of Object.entries(data.directSprites)) {
+        directSpriteOverrides.set(name, path);
+      }
+      applyDirectSpriteOverrides(directSpriteOverrides);
     }
     if (data.tiles) {
       const tileOverrides = new Map<string, string>();

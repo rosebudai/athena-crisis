@@ -38,44 +38,36 @@ Capture browser console output during the smoke test. Look for:
 
 ## Judge: Analysis Phase
 
-After capturing screenshots, run both judges **in parallel**. Mechanics must output `"pass": true`. Visual supports two modes:
+After capturing screenshots, run both judges. Mechanics and visual review are
+both human-readable Codex analyses.
+
+Visual supports two modes:
 
 - default broad audit: catch general visual inconsistencies,
 - optional scoped regression mode: narrow failures to the change under test.
 
 ### Visual Judge
 
-By default this is a broad visual consistency audit. For change-specific verification, augment the prompt with `CHANGE UNDER TEST`, `SCREENSHOTS UNDER REVIEW`, `FOCUS REGIONS`, and `KNOWN BASELINE DEBT` to switch it into a scoped regression check.
+Use Codex directly to review the captured screenshots against [`.agents/judges/visual-judge.md`](/workspace/athena-crisis/.agents/judges/visual-judge.md).
+
+By default this is a broad visual consistency audit. For change-specific verification, provide Codex with `CHANGE UNDER TEST`, `SCREENSHOTS UNDER REVIEW`, `FOCUS REGIONS`, and `KNOWN BASELINE DEBT` to switch it into a scoped regression check.
 
 ```bash
-mkdir -p /tmp/gemini-judge-visual
-cp /tmp/step3.png /tmp/gemini-judge-visual/
-gemini -p "$(cat .claude/judges/visual-judge.md)
+# Prepare the screenshots you want Codex to review.
+cp /tmp/step3.png /workspace/artifacts/step3.png
 
-CHANGE UNDER TEST:
-[paste 1-3 sentences describing the exact feature or cleanup being verified]
-
-SCREENSHOTS UNDER REVIEW:
-- step3.png
-
-FOCUS REGIONS:
-- [paste the changed surfaces to inspect]
-
-KNOWN BASELINE DEBT:
-- [optional: list visible pre-existing issues that should not fail this run]" \
-  -m gemini-3.1-pro-preview \
-  --include-directories /tmp/gemini-judge-visual \
-  --yolo --output-format text 2>/dev/null \
-  > /tmp/verdict-visual.raw
-
-node .agents/scripts/parse-gemini-verdict.mjs /tmp/verdict-visual.raw \
-  > /tmp/verdict-visual.json
+# Then ask Codex to inspect the screenshots using:
+# - .agents/judges/visual-judge.md
+# - CHANGE UNDER TEST
+# - SCREENSHOTS UNDER REVIEW
+# - FOCUS REGIONS
+# - KNOWN BASELINE DEBT (optional)
 ```
 
 Visual pass/fail semantics:
 
 - Broad audit mode: broad visual inconsistencies are valid failures.
-- Scoped regression mode: blocking items are entries in `regressions` and `failures` that are specific, screenshot-grounded, and plausibly introduced by the change under test.
+- Scoped regression mode: blocking items are the specific regressions Codex identifies as screenshot-grounded and plausibly introduced by the change under test.
 - In scoped regression mode, `pre_existing_issues` and `out_of_scope_observations` are non-blocking.
 - If causality is unclear in scoped regression mode, treat the observation as non-blocking.
 
@@ -84,32 +76,25 @@ Visual pass/fail semantics:
 Evaluates screenshot sequences against the QA Plan for state correctness, transitions, and data accuracy.
 
 ```bash
-mkdir -p /tmp/gemini-judge-mechanics
-cp /tmp/step*.png /tmp/gemini-judge-mechanics/
-gemini -p "$(cat .claude/judges/mechanics-judge.md)
+# Prepare the screenshots you want Codex to review.
+cp /tmp/step*.png /workspace/artifacts/
 
-QA PLAN STEPS:
-[paste QA Plan steps from the approved spec here, mapping each to stepN.png]" \
-  -m gemini-3.1-pro-preview \
-  --include-directories /tmp/gemini-judge-mechanics \
-  --yolo --output-format text 2>/dev/null \
-  > /tmp/verdict-mechanics.raw
-
-node .agents/scripts/parse-gemini-verdict.mjs /tmp/verdict-mechanics.raw \
-  > /tmp/verdict-mechanics.json
+# Then ask Codex to inspect the screenshots using:
+# - .agents/judges/mechanics-judge.md
+# - QA PLAN STEPS
+# - SCREENSHOTS UNDER REVIEW
+# - CHANGE UNDER TEST (optional)
 ```
 
 ### Reading Verdicts
 
-Gemini output is not assumed to be clean JSON. Always normalize the raw output through the parser first, then inspect the parsed verdicts:
+Mechanics review should be read directly from Codex's human-readable output.
+Visual review should also be read directly.
 
-```bash
-# Check pass/fail programmatically
-cat /tmp/verdict-visual.json | python3 -c "import sys,json; v=json.load(sys.stdin); print('VISUAL:', 'PASS' if v['pass'] else 'FAIL'); [print(f'  - {f}') for f in v.get('failures',[])]"
-cat /tmp/verdict-mechanics.json | python3 -c "import sys,json; v=json.load(sys.stdin); print('MECHANICS:', 'PASS' if v['pass'] else 'FAIL'); [print(f'  - {f}') for f in v.get('failures',[])]"
-```
-
-Mechanics must pass. Interpret the visual result according to the chosen mode. In scoped regression mode, a run passes when no change-introduced regressions are found even if broader inconsistencies are recorded as non-blocking notes.
+Mechanics must pass. Interpret the visual result according to the chosen mode
+described in `.agents/judges/visual-judge.md`. In scoped regression mode, a run
+passes when Codex finds no change-introduced regressions even if broader
+inconsistencies are recorded as non-blocking notes.
 
 ## Kill Server
 

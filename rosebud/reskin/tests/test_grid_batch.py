@@ -65,6 +65,21 @@ def test_group_into_batches_splits_different_sizes(tmp_path):
     assert (128, 128) in buckets
 
 
+def test_group_into_batches_separates_categories(tmp_path):
+    unit_asset = _make_asset(
+        tmp_path, "unit", 32, 32, (255, 0, 0, 255), category="unit-sprite"
+    )
+    building_asset = _make_asset(
+        tmp_path, "building", 32, 32, (0, 255, 0, 255), category="building"
+    )
+
+    batches = group_into_batches([unit_asset, building_asset])
+
+    assert len(batches) == 2
+    categories = {batch["category"] for batch in batches}
+    assert categories == {"unit-sprite", "building"}
+
+
 def test_group_into_batches_respects_max_per_batch(tmp_path):
     """More than max_per_batch sprites should be split."""
     assets = [

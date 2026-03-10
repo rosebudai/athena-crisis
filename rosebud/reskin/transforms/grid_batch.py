@@ -53,15 +53,18 @@ def group_into_batches(assets, bucket_step=BUCKET_STEP,
         w, h = img.size
         bw = ((w + bucket_step - 1) // bucket_step) * bucket_step
         bh = ((h + bucket_step - 1) // bucket_step) * bucket_step
-        buckets[(bw, bh)].append({"asset": asset, "w": w, "h": h})
+        buckets[(asset.category, bw, bh)].append(
+            {"asset": asset, "w": w, "h": h}
+        )
 
     for key in buckets:
         buckets[key].sort(key=lambda s: s["w"] * s["h"], reverse=True)
 
     batches = []
-    for (bw, bh), sprites in sorted(buckets.items()):
+    for (category, bw, bh), sprites in sorted(buckets.items()):
         for i in range(0, len(sprites), max_per_batch):
             batches.append({
+                "category": category,
                 "bucket": (bw, bh),
                 "sprites": sprites[i:i + max_per_batch],
             })
@@ -97,6 +100,7 @@ def render_grid(batch, batch_id, canvas_size=CANVAS_SIZE):
 
     batch_meta = {
         "batch_id": batch_id,
+        "category": batch.get("category"),
         "bucket": [bw, bh],
         "cols": cols,
         "rows": rows,
@@ -164,7 +168,8 @@ def build_grids(assets, output_dir, canvas_size=CANVAS_SIZE):
     }
 
     for i, batch in enumerate(batches):
-        batch_id = f"batch_{i + 1:03d}"
+        category_slug = (batch.get("category") or "mixed").replace("-", "_")
+        batch_id = f"{category_slug}_batch_{i + 1:03d}"
         grid_path = os.path.join(output_dir, f"{batch_id}.png")
 
         grid_img, batch_meta = render_grid(batch, batch_id, canvas_size)
@@ -174,7 +179,10 @@ def build_grids(assets, output_dir, canvas_size=CANVAS_SIZE):
 
         n = len(batch["sprites"])
         bw, bh = batch["bucket"]
-        print(f"  {batch_id}: {n:2d} sprites, bucket {bw}x{bh}")
+        print(
+            f"  {batch_id}: {n:2d} sprites, "
+            f"category {batch.get('category')}, bucket {bw}x{bh}"
+        )
 
     manifest_path = os.path.join(output_dir, "manifest.json")
     with open(manifest_path, "w") as f:
@@ -223,15 +231,16 @@ def build_grid_prompt(batch_meta, style_prompt, descriptions=None):
 
     cell_text = "\n".join(cell_descs)
 
+    category = batch_meta.get("category", "sprite")
     return (
-        f"This is a {cols}x{rows} grid of game sprites on gray background, "
-        f"separated by black grid lines.\n\n"
+        f"This is a {cols}x{rows} grid of {category} sprite sheets on gray "
+        f"background, separated by black grid lines.\n\n"
         f"Each cell contains:\n{cell_text}\n\n"
         f"Restyle every sprite to: {style_prompt}\n\n"
-        f"You MUST keep the exact same silhouette, shape, size, and "
-        f"proportions of every object. Only change colors and textures. "
-        f"No text, no labels, no new objects. Keep grid lines and gray "
-        f"backgrounds."
+        f"You MUST preserve exact sprite bounds, animation frame order, "
+        f"registration, transparency, silhouettes, and pixel-art readability. "
+        f"Only change colors and surface textures. No text, no labels, no new "
+        f"objects. Keep the grid lines and gray backgrounds untouched."
     )
 
 

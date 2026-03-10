@@ -418,6 +418,19 @@ export const Sprites = {
   Upgrade: UpgradeSprite,
 } as const;
 
+export function applyDirectSpriteOverrides(
+  overrides: ReadonlyMap<string, string>,
+): void {
+  for (const [name, url] of overrides) {
+    (Sprites as Record<string, string>)[name] = url;
+  }
+  if (overrides.size > 0) {
+    console.log(
+      `[Reskin] Applied ${overrides.size} direct sprite override(s)`,
+    );
+  }
+}
+
 export const ShadowImages = new Map([
   ['Units-AIU', UnitsAIUSprite],
   ['Units-APU', UnitsAPUSprite],

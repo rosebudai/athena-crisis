@@ -1,8 +1,9 @@
 import json
 import os
+
 import pytest
 
-from rosebud.reskin.manifest import Manifest
+from rosebud.reskin.manifest import Manifest, write_runtime_manifest
 
 
 @pytest.fixture
@@ -54,3 +55,23 @@ def test_manifest_summary(manifest_path):
     assert summary["completed"] == 2
     assert summary["failed"] == 1
     assert summary["total"] == 3
+
+
+def test_write_runtime_manifest_preserves_tiles(tmp_path):
+    manifest_path = str(tmp_path / "runtime.json")
+    with open(manifest_path, "w") as f:
+        json.dump({"tiles": {"Tiles0": "reskin/cozy/Tiles0.png"}}, f)
+
+    manifest = write_runtime_manifest(
+        manifest_path,
+        "cyberpunk",
+        ["Buildings", "Units-Infantry"],
+        direct_sprites={"Structures": "reskin/cyberpunk/Structures.png"},
+    )
+
+    assert manifest["basePath"] == "reskin/cyberpunk"
+    assert manifest["sprites"] == ["Buildings", "Units-Infantry"]
+    assert manifest["directSprites"] == {
+        "Structures": "reskin/cyberpunk/Structures.png"
+    }
+    assert manifest["tiles"] == {"Tiles0": "reskin/cozy/Tiles0.png"}

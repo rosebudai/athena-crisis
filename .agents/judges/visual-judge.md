@@ -1,62 +1,40 @@
 # Visual Judge — Athena Crisis
 
-Gemini prompt for evaluating whether screenshots are visually consistent with Athena Crisis. By default this is a broad aesthetic/cohesion audit. When optional scope context is provided, the same judge can be narrowed into a change-specific regression check.
+Use this rubric when Codex reviews screenshots for visual quality.
 
-## Invocation
+This is not a model-specific prompt and it is not a JSON contract. It is a shared review standard for human-readable Codex analysis.
 
-```bash
-mkdir -p /tmp/gemini-judge-visual
-cp /tmp/step3.png /tmp/gemini-judge-visual/
-gemini -p "$(cat .claude/judges/visual-judge.md)
+## Purpose
 
-CHANGE UNDER TEST:
-Remove tile reskin postprocess cleanup without changing gameplay shell styling.
+Judge whether captured screenshots are visually consistent with Athena Crisis.
 
-SCREENSHOTS UNDER REVIEW:
-- step3.png
-
-FOCUS REGIONS:
-- Map tiles
-- Tile edges
-- Terrain rendering
-
-KNOWN BASELINE DEBT:
-- Existing shell chrome and toolbar styling may be visually inconsistent with the pixel-art target.
-- Existing icons or panel treatments outside the changed rendering surface should not fail this run." \
-  -m gemini-3.1-pro-preview \
-  --include-directories /tmp/gemini-judge-visual \
-  --yolo --output-format text 2>/dev/null \
-  > /tmp/verdict-visual.raw
-
-node .agents/scripts/parse-gemini-verdict.mjs /tmp/verdict-visual.raw \
-  > /tmp/verdict-visual.json
-```
-
-## Prompt
-
-You are a visual quality judge for Athena Crisis, a modern-retro pixel turn-based strategy game.
-
-You will receive:
-
-- one or more screenshots in the included directory,
-- optionally, a `CHANGE UNDER TEST` section,
-- optionally, a `SCREENSHOTS UNDER REVIEW` section,
-- optionally, a `FOCUS REGIONS` section,
-- and optionally, a `KNOWN BASELINE DEBT` section.
-
-### Modes
-
-Choose the evaluation mode from the prompt context:
+By default this supports two review modes:
 
 1. `broad_audit`
-   Use this when no meaningful change-specific context is provided. In this mode, evaluate the screenshots as a general visual consistency and aesthetic check. Broad inconsistencies are valid failures.
+   Use when no meaningful change-specific context is provided. Broad inconsistencies are valid findings.
 
 2. `scoped_regression`
-   Use this when `CHANGE UNDER TEST` and scoped review context are provided. In this mode, still note broad inconsistencies, but do not fail on broad pre-existing style debt, unrelated shell aesthetics, or subjective cleanup opportunities unless they appear newly introduced by the change. If causality is unclear, prefer a non-blocking observation over a failure.
+   Use when the reviewer is given:
+   - `CHANGE UNDER TEST`,
+   - `SCREENSHOTS UNDER REVIEW`,
+   - `FOCUS REGIONS`,
+   - and optionally `KNOWN BASELINE DEBT`.
 
-### Evaluation Rubric
+   In this mode, only findings plausibly introduced by the change under test are blocking.
 
-Apply this rubric in both modes. In `broad_audit`, any significant inconsistency can fail. In `scoped_regression`, use the rubric to classify issues, but only change-linked regressions are blocking.
+## Inputs
+
+When using this rubric, provide Codex:
+
+- one or more screenshots,
+- optionally a short `CHANGE UNDER TEST` description,
+- optionally `SCREENSHOTS UNDER REVIEW`,
+- optionally `FOCUS REGIONS`,
+- optionally `KNOWN BASELINE DEBT`.
+
+## Evaluation Rubric
+
+Apply the following checks in either mode.
 
 1. `pixel_fidelity`
    Crisp pixel art at integer scale for tiles, units, buildings, and pixel-styled UI surfaces. Flag blur, anti-aliased vector intrusion into pixel surfaces, or obvious scaling artifacts.
@@ -82,112 +60,56 @@ Apply this rubric in both modes. In `broad_audit`, any significant inconsistency
 8. `overall_cohesion`
    Does the screen feel visually coherent with Athena Crisis as a whole? Flag anything that feels stylistically off, too modern, too glossy, too flat, or otherwise inconsistent.
 
-### Classification Rules
-
-Always classify observations into these buckets:
-
-- `regressions`: screenshot-grounded issues likely introduced by the change under test. In `scoped_regression`, only these can fail the run. In `broad_audit`, use this bucket for newly visible or clearly severe inconsistencies even if no change context was provided.
-- `pre_existing_issues`: visible issues that appear older, unrelated, or are called out in `KNOWN BASELINE DEBT`. These are non-blocking in `scoped_regression`.
-- `out_of_scope_observations`: real observations outside the requested verification target or focus regions. These are non-blocking in `scoped_regression`.
-
-### What To Check
+## Scoped Regression Checks
 
 In `scoped_regression`, focus especially on the changed surface and nearby side effects:
 
 1. `changed_feature_rendering`
-   Does the changed feature render coherently in the reviewed screenshots? For tile or rendering work, focus on seams, edge treatment, mismatched transitions, corrupted sprites, missing assets, obvious blur, and rendering artifacts.
+   For tile or rendering work, focus on seams, edge treatment, mismatched transitions, corrupted sprites, missing assets, blur, and rendering artifacts.
 
 2. `change_local_cohesion`
-   Does the changed area still fit the immediately surrounding visuals well enough for a regression check? Look for abrupt mismatches, broken palette transitions, clipping, layout shifts, or obvious rendering discontinuities near the changed region.
+   Look for abrupt mismatches, broken palette transitions, clipping, layout shifts, or obvious rendering discontinuities near the changed region.
 
 3. `unintended_visual_side_effects`
-   Did the change introduce unrelated local breakage nearby, such as overlap, clipping, missing text, broken layering, or damaged UI adjacent to the changed feature?
+   Look for overlap, clipping, missing text, broken layering, or nearby UI damage introduced by the change.
 
-### Failure Rules
+## Classification Rules
 
-- Always set `mode` to either `broad_audit` or `scoped_regression`.
-- In `broad_audit`, `pass` is `false` if the screenshots contain meaningful visual inconsistencies under the rubric, even if they may be long-standing.
-- In `scoped_regression`, `pass` is `false` only when there is at least one specific `regression`.
-- In `scoped_regression`, every blocking `regression` must name the affected screenshot and explain why it appears tied to the change under test.
-- Do not convert vague taste preferences into failures. Ground failures in concrete visual evidence.
+Always classify observations into these buckets:
 
-### Output Format
+- `regressions`
+  Screenshot-grounded issues likely introduced by the change under test. In scoped regression mode, only these are blocking.
 
-Respond with ONLY valid JSON, no markdown fences, no extra text:
+- `pre_existing_issues`
+  Visible issues that appear older, unrelated, or are explicitly called out in `KNOWN BASELINE DEBT`. These are non-blocking in scoped regression mode.
 
-```json
-{
-  "mode": "scoped_regression",
-  "pass": true,
-  "summary": "No visual regressions attributable to the change under test are visible in the reviewed screenshots.",
-  "change_under_test": "Remove tile reskin postprocess cleanup without changing gameplay shell styling.",
-  "scope": {
-    "screenshots_reviewed": ["step3.png"],
-    "focus_regions": ["map tiles", "tile edges", "terrain rendering"],
-    "out_of_scope": ["global shell styling", "legacy toolbar icon set", "existing panel chrome"]
-  },
-  "regressions": [],
-  "pre_existing_issues": [
-    {
-      "issue": "Terrain info panel uses rounded modern card styling.",
-      "evidence": "Visible in step3.png but not tied to the changed rendering surface.",
-      "severity": "minor"
-    }
-  ],
-  "out_of_scope_observations": [
-    {
-      "issue": "Toolbar icons appear vector-styled rather than pixel-art.",
-      "evidence": "Visible in step3.png but outside the requested verification target."
-    }
-  ],
-  "checks": {
-    "pixel_fidelity": {
-      "pass": true,
-      "evidence": "Pixel surfaces remain crisp."
-    },
-    "grid_alignment": {
-      "pass": true,
-      "evidence": "Visible game content remains aligned to the map grid."
-    },
-    "palette_discipline": {
-      "pass": true,
-      "evidence": "Changed terrain colors remain visually coherent with nearby tiles."
-    },
-    "borders_surfaces": {
-      "pass": true,
-      "evidence": "No new panel surface inconsistency was introduced by this change."
-    },
-    "typography": {
-      "pass": true,
-      "evidence": "No new typography inconsistency was introduced by this change."
-    },
-    "iconography": {
-      "pass": true,
-      "evidence": "No new icon inconsistency was introduced by this change."
-    },
-    "panel_treatment": {
-      "pass": true,
-      "evidence": "No new overlay treatment inconsistency was introduced by this change."
-    },
-    "overall_cohesion": {
-      "pass": true,
-      "evidence": "The reviewed screen remains broadly cohesive."
-    },
-    "changed_feature_rendering": {
-      "pass": true,
-      "evidence": "Tile art appears consistent and visually coherent after the cleanup."
-    },
-    "change_local_cohesion": {
-      "pass": true,
-      "evidence": "No seams, mismatched edges, or obvious rendering discontinuities are visible in the reviewed terrain."
-    },
-    "unintended_visual_side_effects": {
-      "pass": true,
-      "evidence": "No nearby clipping, overlap, or corrupted UI is visible."
-    }
-  },
-  "failures": []
-}
-```
+- `out_of_scope_observations`
+  Real observations outside the requested verification target or focus regions. These are non-blocking in scoped regression mode.
 
-In `broad_audit`, the judge should behave like a general visual consistency check. In `scoped_regression`, `pre_existing_issues` and `out_of_scope_observations` must not fail the run. The `failures` array must contain only the blocking reasons for the chosen mode.
+## Output Guidance
+
+Codex should return a concise human-readable verdict instead of JSON.
+
+Recommended structure:
+
+1. `Mode`
+   State either `broad_audit` or `scoped_regression`.
+
+2. `Verdict`
+   State pass/fail in plain language.
+
+3. `Blocking Findings`
+   List only change-linked regressions when in scoped mode.
+
+4. `Non-Blocking Notes`
+   Include `pre_existing_issues` and `out_of_scope_observations` when relevant.
+
+5. `Check Summary`
+   Briefly summarize the most relevant rubric categories such as `pixel_fidelity`, `grid_alignment`, `palette_discipline`, and `overall_cohesion`.
+
+## Failure Rules
+
+- In `broad_audit`, meaningful visual inconsistencies can fail the review.
+- In `scoped_regression`, only specific, screenshot-grounded regressions tied to the change under test should fail the review.
+- Do not turn vague taste preferences into blocking findings.
+- If causality is unclear in scoped mode, prefer a non-blocking note over a regression.

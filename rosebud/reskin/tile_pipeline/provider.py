@@ -17,12 +17,22 @@ from .prompts import (
     ANIM_BATCH_PROMPT_TEMPLATE,
     BATCH_PROMPT_TEMPLATE,
     MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE,
+    PREVIEW_ANIM_BATCH_PROMPT_TEMPLATE,
     TILE_TYPE_HINTS,
     build_cell_legend,
 )
 
 MODEL_NAME = "gemini-3.1-flash-image-preview"
 PROMPT_TEMPLATE_VERSION = "minimal-cache-v1"
+
+TRANSITION_REFERENCE_BUNDLES: dict[str, list[str]] = {
+    "water": ["water", "plain", "river"],
+    "river": ["river", "water", "plain"],
+    "pier": ["pier", "water", "plain"],
+    "floatingedge": ["water", "plain", "river", "pier"],
+    "reef": ["water", "plain"],
+    "sea_object": ["water", "plain"],
+}
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -42,30 +52,25 @@ def _resolve_anchor_paths(
     if not anchor_paths:
         return []
 
+    def _append(anchor_key: str, resolved: list[str]) -> None:
+        path = anchor_paths.get(anchor_key)
+        if path and path not in resolved:
+            resolved.append(path)
+
+    if tile_type in TRANSITION_REFERENCE_BUNDLES:
+        resolved: list[str] = []
+        for anchor_key in TRANSITION_REFERENCE_BUNDLES[tile_type]:
+            _append(anchor_key, resolved)
+        return resolved
+
     batch_anchor_paths: list[str] = []
     type_anchor_key = ANCHOR_INHERITANCE.get(tile_type, tile_type)
-    type_anchor = anchor_paths.get(type_anchor_key)
-    if not type_anchor:
+    _append(type_anchor_key, batch_anchor_paths)
+    if not batch_anchor_paths:
         return batch_anchor_paths
 
-    batch_anchor_paths.append(type_anchor)
-    plain_anchor = anchor_paths.get("plain")
-    water_anchor = anchor_paths.get("water")
-
-    if type_anchor_key in ("water", "river"):
-        if plain_anchor and plain_anchor != type_anchor:
-            batch_anchor_paths.append(plain_anchor)
-    elif type_anchor_key == "pier":
-        if water_anchor and water_anchor != type_anchor:
-            batch_anchor_paths.append(water_anchor)
-        if plain_anchor and plain_anchor != type_anchor:
-            batch_anchor_paths.append(plain_anchor)
-    elif type_anchor_key in ("street", "plain", "rail"):
-        if plain_anchor and plain_anchor != type_anchor:
-            batch_anchor_paths.append(plain_anchor)
-    elif type_anchor_key in ("mountain", "forest", "campsite"):
-        if plain_anchor and plain_anchor != type_anchor:
-            batch_anchor_paths.append(plain_anchor)
+    if type_anchor_key in ("street", "plain", "rail", "mountain", "forest", "campsite"):
+        _append("plain", batch_anchor_paths)
 
     return batch_anchor_paths
 
@@ -78,12 +83,16 @@ def _build_batch_cache_context(
 ) -> dict[str, Any]:
     prompt_bundle_hash = _sha256_bytes(
         json.dumps(
-            {
+            ({
                 "anchor": ANCHOR_PROMPT_TEMPLATE,
                 "anim": ANIM_BATCH_PROMPT_TEMPLATE,
                 "batch": BATCH_PROMPT_TEMPLATE,
                 "multi": MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE,
-            },
+            } | (
+                {"preview_anim": PREVIEW_ANIM_BATCH_PROMPT_TEMPLATE}
+                if batch_meta.get("preview_path")
+                else {}
+            )),
             sort_keys=True,
         ).encode("utf-8")
     )
@@ -99,9 +108,12 @@ def _build_batch_cache_context(
         "theme_name": theme.get("name"),
         "theme_prompt": theme.get("prompt", ""),
         "tile_type": batch_meta["tile_type"],
+        "batch_family": batch_meta.get("batch_family", batch_meta["tile_type"]),
+        "layout_strategy": batch_meta.get("layout_strategy"),
         "is_animation_batch": batch_meta.get("is_animation_batch", False),
         "animation_name": batch_meta.get("anim_name"),
         "batch_image_sha256": _sha256_file(batch_meta["path"]),
+        "preview_image_sha256": _sha256_file(batch_meta.get("preview_path")),
         "cell_ids": [cell["id"] for cell in batch_meta["cells"]],
         "cell_positions": [[cell["col"], cell["row"]] for cell in batch_meta["cells"]],
         "anchor_hashes": resolved_anchor_hashes,
@@ -134,8 +146,12 @@ def _build_batch_cache_entry(
         json.dumps(
             {
                 "tile_type": batch_meta["tile_type"],
+                "batch_family": batch_meta.get("batch_family", batch_meta["tile_type"]),
+                "layout_strategy": batch_meta.get("layout_strategy"),
                 "is_animation_batch": batch_meta.get("is_animation_batch", False),
                 "animation_name": batch_meta.get("anim_name"),
+                "batch_image_sha256": _sha256_file(batch_meta["path"]),
+                "preview_image_sha256": _sha256_file(batch_meta.get("preview_path")),
                 "cell_ids": [cell["id"] for cell in batch_meta["cells"]],
                 "cell_positions": [[cell["col"], cell["row"]] for cell in batch_meta["cells"]],
             },
@@ -219,10 +235,14 @@ def reskin_batch_gemini(
     cells: list[dict] | None = None,
     style_sheet_path: str | None = None,
     is_animation_batch: bool = False,
+    preview_path: str | None = None,
 ) -> Image.Image | None:
     """Send a batch grid to Gemini Flash for reskinning.
 
-    When *is_animation_batch* is True, uses ``ANIM_BATCH_PROMPT_TEMPLATE``.
+    When *preview_path* is provided for an animation batch, uses
+    ``PREVIEW_ANIM_BATCH_PROMPT_TEMPLATE`` with preview image context and the
+    atlas-target grid last. Otherwise animation batches use
+    ``ANIM_BATCH_PROMPT_TEMPLATE``.
 
     When *anchor_paths* contains one path, uses the two-image
     ``BATCH_PROMPT_TEMPLATE`` (anchor + batch).  When it contains multiple
@@ -271,7 +291,23 @@ def reskin_batch_gemini(
             data=sheet_data, mime_type="image/png",
         )
 
-    if is_animation_batch:
+    if is_animation_batch and preview_path:
+        prompt = PREVIEW_ANIM_BATCH_PROMPT_TEMPLATE.format(
+            cell_legend=cell_legend,
+            style_sheet_instruction=style_sheet_instruction,
+        )
+
+        contents: list = [prompt]
+        if style_sheet_part is not None:
+            contents.append(style_sheet_part)
+        for ap in anchor_paths or []:
+            data = open(ap, "rb").read()
+            contents.append(types.Part.from_bytes(data=data, mime_type="image/png"))
+        preview_data = open(preview_path, "rb").read()
+        contents.append(types.Part.from_bytes(data=preview_data, mime_type="image/png"))
+        batch_data = open(batch_path, "rb").read()
+        contents.append(types.Part.from_bytes(data=batch_data, mime_type="image/png"))
+    elif is_animation_batch:
         # Animation batch: use ANIM_BATCH_PROMPT_TEMPLATE
         prompt = ANIM_BATCH_PROMPT_TEMPLATE.format(
             cell_legend=cell_legend,
@@ -404,6 +440,7 @@ def _reskin_batches(
                 cells=batch_meta.get("cells"),
                 style_sheet_path=style_sheet_path,
                 is_animation_batch=batch_meta.get("is_animation_batch", False),
+                preview_path=batch_meta.get("preview_path"),
             )
             if reskinned_img is None:
                 with print_lock:

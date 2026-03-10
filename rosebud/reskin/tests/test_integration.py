@@ -19,21 +19,21 @@ REPO_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 
 
 @pytest.mark.slow
-def test_batch_dry_run(tmp_path):
-    """Run the full batch pipeline with echo provider and verify outputs.
+def test_standard_dry_run_preserves_progress_with_force(tmp_path):
+    """Run the standard one-sheet pipeline and verify `--force` keeps progress.
 
     This test exercises the real download path -- sprite source images are
-    fetched from art.athenacrisis.com.  A generous timeout is used since
+    fetched from art.athenacrisis.com. A generous timeout is used since
     network speed varies.
     """
     output_dir = str(tmp_path / "output")
 
-    result = subprocess.run(
+    first = subprocess.run(
         [
             sys.executable, RESKIN_SCRIPT,
             "--theme", "cyberpunk",
-            "--batch",
             "--dry-run",
+            "--name", "Units-Infantry",
             "--output-dir", output_dir,
             "--repo-root", REPO_ROOT,
         ],
@@ -42,44 +42,39 @@ def test_batch_dry_run(tmp_path):
         timeout=300,
     )
 
-    # ---- Exit code ----
-    assert result.returncode == 0, (
-        f"CLI exited with code {result.returncode}\n"
-        f"STDOUT:\n{result.stdout}\n"
-        f"STDERR:\n{result.stderr}"
+    assert first.returncode == 0, (
+        f"CLI exited with code {first.returncode}\n"
+        f"STDOUT:\n{first.stdout}\n"
+        f"STDERR:\n{first.stderr}"
     )
 
-    # ---- Grid directory exists ----
-    grids_dir = os.path.join(output_dir, "cyberpunk", "grids")
-    assert os.path.isdir(grids_dir), f"Grid directory missing: {grids_dir}"
-
-    # ---- Grid manifest exists and is valid ----
-    grid_manifest_path = os.path.join(grids_dir, "manifest.json")
-    assert os.path.isfile(grid_manifest_path), (
-        f"Grid manifest missing: {grid_manifest_path}"
+    second = subprocess.run(
+        [
+            sys.executable, RESKIN_SCRIPT,
+            "--theme", "cyberpunk",
+            "--dry-run",
+            "--name", "Units-HeavyTank",
+            "--force",
+            "--output-dir", output_dir,
+            "--repo-root", REPO_ROOT,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
     )
 
-    with open(grid_manifest_path) as f:
-        grid_manifest = json.load(f)
-
-    assert "batches" in grid_manifest
-    assert len(grid_manifest["batches"]) >= 1, (
-        f"Expected at least 1 batch, got {len(grid_manifest['batches'])}"
+    assert second.returncode == 0, (
+        f"CLI exited with code {second.returncode}\n"
+        f"STDOUT:\n{second.stdout}\n"
+        f"STDERR:\n{second.stderr}"
     )
 
-    # ---- Individual sprite PNGs exist ----
     theme_dir = os.path.join(output_dir, "cyberpunk")
-    png_files = [
-        f for f in os.listdir(theme_dir)
-        if f.endswith(".png")
-    ]
-    assert len(png_files) > 0, (
-        f"No sprite PNGs found in {theme_dir}. "
-        f"Contents: {os.listdir(theme_dir)}"
-    )
+    assert os.path.isfile(os.path.join(theme_dir, "Units-Infantry.png"))
+    assert os.path.isfile(os.path.join(theme_dir, "Units-HeavyTank.png"))
+    assert not os.path.exists(os.path.join(theme_dir, "grids"))
 
-    # ---- Runtime manifest exists and is valid ----
-    runtime_manifest_path = os.path.join(theme_dir, "manifest.json")
+    runtime_manifest_path = os.path.join(output_dir, "manifest.json")
     assert os.path.isfile(runtime_manifest_path), (
         f"Runtime manifest missing: {runtime_manifest_path}"
     )
@@ -93,15 +88,19 @@ def test_batch_dry_run(tmp_path):
     assert "sprites" in runtime_manifest, (
         "Runtime manifest missing 'sprites'"
     )
-    assert len(runtime_manifest["sprites"]) > 0, (
-        "Runtime manifest 'sprites' array is empty"
-    )
+    assert runtime_manifest["sprites"] == [
+        "Units-HeavyTank",
+        "Units-Infantry",
+    ], runtime_manifest["sprites"]
+    assert "directSprites" not in runtime_manifest
 
-    # ---- At least 70 sprites extracted ----
-    sprite_count = len(runtime_manifest["sprites"])
-    assert sprite_count >= 70, (
-        f"Expected at least 70 sprites, got {sprite_count}"
-    )
+    progress_manifest_path = os.path.join(theme_dir, ".progress.json")
+    with open(progress_manifest_path) as f:
+        progress_manifest = json.load(f)
+    assert sorted(progress_manifest["assets"]) == [
+        "Units-HeavyTank",
+        "Units-Infantry",
+    ]
 
 
 def test_full_suite_passes():

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Reskin pipeline CLI -- reskin Athena Crisis assets into themed styles."""
+"""Reskin pipeline CLI for named unit and building sprite sheets."""
+
+from __future__ import annotations
 
 import argparse
 import hashlib
@@ -15,13 +17,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from config import load_theme
 from discovery import discover_assets
-from manifest import Manifest
-from providers.echo import EchoProvider
+from manifest import Manifest, write_runtime_manifest
 from providers.base import ReskinProvider
-from transforms.ai_reskin import ai_reskin
+from providers.echo import EchoProvider
+from providers.nano_banana import NanoBananaProvider
+from transforms.ai_reskin import PROMPT_VERSION, ai_reskin
 from transforms.palette_swap import palette_swap
 
-DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+DEFAULT_OUTPUT_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "public", "reskin")
+)
+DEFAULT_CATEGORIES = ("unit-sprite", "building")
+DIRECT_RUNTIME_SPRITES = {"Structures"}
 MAX_RETRIES = 3
 
 
@@ -29,11 +36,7 @@ def get_provider(name: str) -> ReskinProvider:
     """Instantiate a provider by name."""
     if name == "echo":
         return EchoProvider()
-    if name == "fal_gemini":
-        from providers.fal_gemini import FalGeminiProvider
-        return FalGeminiProvider()
     if name == "nano_banana":
-        from providers.nano_banana import NanoBananaProvider
         return NanoBananaProvider()
     raise ValueError(f"Unknown provider: {name}")
 
@@ -47,21 +50,107 @@ def file_hash(path: str) -> str:
     return h.hexdigest()[:12]
 
 
-def process_asset(asset, theme, provider, output_dir, palette_only=False):
-    """Process a single asset through the appropriate transform.
+def hash_json(payload: dict) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:12]
 
-    Returns output_path on success, raises on failure.
-    """
+
+def resolve_categories(category_args: list[str] | None) -> list[str]:
+    if category_args:
+        return category_args
+    return list(DEFAULT_CATEGORIES)
+
+
+def build_asset_fingerprint(
+    asset,
+    *,
+    theme,
+    provider_name: str,
+    provider_params: dict,
+    style_reference_paths: list[str],
+    palette_only: bool,
+) -> tuple[str, dict]:
+    style_reference_hashes = {
+        os.path.basename(path): file_hash(path)
+        for path in style_reference_paths
+    }
+    metadata = {
+        "asset_name": asset.name,
+        "category": asset.category,
+        "source_hash": file_hash(asset.source_path),
+        "style_reference_hashes": style_reference_hashes,
+        "theme_name": theme.name,
+        "theme_prompt": theme.prompt,
+        "prompt_version": PROMPT_VERSION,
+        "provider": provider_name,
+        "provider_params": provider_params,
+        "palette_only": palette_only,
+    }
+    return hash_json(metadata), metadata
+
+
+def manifest_entries_for_assets(
+    asset_names: list[str],
+    theme_name: str,
+) -> tuple[list[str], dict[str, str]]:
+    sprite_names: list[str] = []
+    direct_sprites: dict[str, str] = {}
+
+    for name in sorted(dict.fromkeys(asset_names)):
+        if name in DIRECT_RUNTIME_SPRITES:
+            direct_sprites[name] = f"reskin/{theme_name}/{name}.png"
+        else:
+            sprite_names.append(name)
+
+    return sprite_names, direct_sprites
+
+
+def write_runtime_manifest_for_completed_assets(
+    manifest: Manifest,
+    output_dir: str,
+    theme_name: str,
+) -> str:
+    completed_names = [
+        name
+        for name, entry in manifest.completed_assets().items()
+        if os.path.exists(entry.get("output_path", ""))
+    ]
+    sprite_names, direct_sprites = manifest_entries_for_assets(
+        completed_names, theme_name
+    )
+    runtime_manifest_path = os.path.join(output_dir, "manifest.json")
+    write_runtime_manifest(
+        runtime_manifest_path,
+        theme_name,
+        sprite_names,
+        direct_sprites=direct_sprites,
+    )
+    return runtime_manifest_path
+
+
+def process_asset(
+    asset,
+    theme,
+    provider,
+    output_dir,
+    *,
+    palette_only: bool = False,
+    style_reference_paths: list[str] | None = None,
+):
+    """Process a single asset through the appropriate transform."""
     if asset.category in ("shadow", "decorator") or palette_only:
         image_bytes = palette_swap(asset.source_path, theme.palette)
     else:
         image_bytes = ai_reskin(
-            asset.source_path, asset.category, theme.prompt, provider
+            asset.source_path,
+            asset.category,
+            theme.prompt,
+            provider,
+            asset_name=asset.name,
+            reference_image_paths=style_reference_paths or [],
         )
 
-    # Post-process: resize AI output to match original dimensions and
-    # restore alpha channel.  AI models often output 4096x4096 RGB images
-    # regardless of the input size.
     from PIL import Image
     import io
 
@@ -69,7 +158,9 @@ def process_asset(asset, theme, provider, output_dir, palette_only=False):
     result = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
 
     if result.size != original.size:
-        result = result.resize(original.size, Image.LANCZOS)
+        raise ValueError(
+            f"Provider returned {result.size}, expected {original.size}"
+        )
 
     # Restore alpha from original (AI destroys transparency)
     r, g, b, _ = result.split()
@@ -80,7 +171,6 @@ def process_asset(asset, theme, provider, output_dir, palette_only=False):
     result.save(buf, format="PNG")
     image_bytes = buf.getvalue()
 
-    # Write output as PNG under output_dir/theme.name/
     output_path = os.path.join(output_dir, theme.name, f"{asset.name}.png")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -90,136 +180,66 @@ def process_asset(asset, theme, provider, output_dir, palette_only=False):
     return output_path
 
 
-def run_batch(args, theme, provider):
-    """Batch mode: group assets into 4x4 grids and restyle via AI.
-
-    Steps:
-      1. Discover assets
-      2. Build 4x4 grid images (16 sprites each)
-      3. Send each grid to AI provider
-      4. Extract restyled sprites, restore alpha masks, save individually
-      5. Write runtime manifest for Sprites.tsx integration
-    """
-    from transforms.grid_batch import (
-        build_grids,
-        build_grid_prompt,
-        extract_and_save,
-    )
-
-    assets = discover_assets(
-        args.repo_root, category=args.category
-    )
-    if args.name:
-        assets = [a for a in assets if a.name == args.name]
-    print(f"Discovered {len(assets)} assets")
-    if not assets:
-        print("No assets found. Check category/name filter.")
-        sys.exit(1)
-
-    theme_output = os.path.join(args.output_dir, theme.name)
-    grids_dir = os.path.join(theme_output, "grids")
-    restyled_dir = os.path.join(theme_output, "restyled")
-    sprites_dir = os.path.join(theme_output)
-
-    # Step 1: Build grids
-    print("\n=== Building grids ===")
-    grid_manifest = build_grids(assets, grids_dir)
-
-    # Step 2: Send each grid to AI provider
-    print("\n=== Restyling grids via AI ===")
-    os.makedirs(restyled_dir, exist_ok=True)
-    total_batches = len(grid_manifest["batches"])
-
-    for i, batch_meta in enumerate(grid_manifest["batches"], 1):
-        batch_id = batch_meta["batch_id"]
-        grid_path = batch_meta["grid_file"]
-        output_path = os.path.join(restyled_dir, f"{batch_id}_restyled.png")
-
-        if not args.force and os.path.exists(output_path):
-            print(f"[{i}/{total_batches}] {batch_id}: skipping (exists)")
-            continue
-
-        n_sprites = len(batch_meta["sprites"])
-        print(
-            f"[{i}/{total_batches}] {batch_id}: "
-            f"{n_sprites} sprites...",
-            end=" ",
-            flush=True,
+def validate_style_reference_paths(paths: list[str]) -> list[str]:
+    resolved_paths = [os.path.abspath(path) for path in paths]
+    missing = [path for path in resolved_paths if not os.path.exists(path)]
+    if missing:
+        raise FileNotFoundError(
+            "Style reference file(s) not found: " + ", ".join(missing)
         )
-
-        prompt = build_grid_prompt(batch_meta, theme.prompt)
-
-        # Save prompt for debugging
-        prompt_path = os.path.join(restyled_dir, f"{batch_id}_prompt.txt")
-        with open(prompt_path, "w") as f:
-            f.write(prompt)
-
-        ok = provider.transform_grid(grid_path, prompt, output_path)
-        print("OK" if ok else "FAILED")
-
-    # Step 3: Extract individual sprites
-    print("\n=== Extracting sprites ===")
-    results = extract_and_save(
-        grid_manifest, restyled_dir, sprites_dir
-    )
-
-    # Step 4: Write runtime manifest for Sprites.tsx integration
-    runtime_manifest = {
-        "basePath": f"reskin/{theme.name}",
-        "sprites": [name for name, _ in results],
-    }
-    runtime_manifest_path = os.path.join(sprites_dir, "manifest.json")
-    os.makedirs(os.path.dirname(runtime_manifest_path), exist_ok=True)
-    with open(runtime_manifest_path, "w") as f:
-        json.dump(runtime_manifest, f, indent=2)
-
-    print(f"\n--- Summary ---")
-    print(f"Grids:     {total_batches}")
-    print(f"Extracted: {len(results)}")
-    print(f"Output:    {sprites_dir}")
-    print(f"Manifest:  {runtime_manifest_path}")
+    return resolved_paths
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Reskin Athena Crisis assets into themed styles."
+        description="Reskin Athena Crisis unit and building sprite sheets."
     )
     parser.add_argument(
-        "--theme", required=True,
+        "--theme",
+        required=True,
         help="Theme name or path to theme JSON",
     )
     parser.add_argument(
         "--category",
+        action="append",
         choices=["unit-sprite", "building", "portrait", "icon", "effect"],
-        help="Process only this category",
+        help="Process only this category. Repeat to include multiple categories.",
     )
     parser.add_argument(
         "--name",
-        help="Process only this sprite name (e.g. Units-Tank)",
+        help="Process only this sprite name (e.g. Units-HeavyTank)",
     )
     parser.add_argument(
-        "--provider", default="echo",
-        help="AI provider name (default: echo)",
+        "--provider",
+        default="nano_banana",
+        choices=["nano_banana"],
+        help="AI provider name (default: nano_banana)",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Use echo provider (no API calls)",
     )
     parser.add_argument(
-        "--force", action="store_true",
-        help="Reprocess all assets, ignore manifest",
+        "--force",
+        action="store_true",
+        help="Reprocess all assets, ignore progress manifest",
     )
     parser.add_argument(
-        "--palette-only", action="store_true",
-        help="Use palette swap for all categories (skip AI provider)",
+        "--palette-only",
+        action="store_true",
+        help="Debug/fallback mode: use palette swap instead of AI generation.",
     )
     parser.add_argument(
-        "--batch", action="store_true",
-        help="Use grid batching (4x4 grids, 16x fewer API calls)",
+        "--style-reference",
+        action="append",
+        default=[],
+        help="Optional style reference image path. Repeat for multiple images.",
     )
     parser.add_argument(
-        "--output-dir", default=DEFAULT_OUTPUT_DIR,
-        help="Output directory",
+        "--output-dir",
+        default=DEFAULT_OUTPUT_DIR,
+        help="Served reskin output directory",
     )
     parser.add_argument(
         "--repo-root",
@@ -229,11 +249,14 @@ def main():
 
     args = parser.parse_args()
 
-    # Load theme
+    args.output_dir = os.path.abspath(args.output_dir)
+    style_reference_paths = validate_style_reference_paths(args.style_reference)
+    categories = resolve_categories(args.category)
+
     theme = load_theme(args.theme)
     print(f"Theme: {theme.name} -- {theme.description}")
+    print(f"Categories: {', '.join(categories)}")
 
-    # Get provider (palette-only mode doesn't need a real provider)
     if args.dry_run or args.palette_only:
         provider = EchoProvider()
         provider_name = "echo"
@@ -241,63 +264,78 @@ def main():
         provider = get_provider(args.provider)
         provider_name = args.provider
 
-    # Batch mode: grid-based AI restyling
-    if args.batch:
-        run_batch(args, theme, provider)
-        return
-
-    # Standard mode: process assets one at a time
-    assets = discover_assets(args.repo_root, category=args.category)
-    if args.name:
-        assets = [a for a in assets if a.name == args.name]
+    requested_names = [args.name] if args.name else None
+    assets = discover_assets(
+        args.repo_root,
+        category=categories,
+        names=requested_names,
+    )
     print(f"Discovered {len(assets)} assets")
 
     if not assets:
         print("No assets found. Check category/name filter.")
         sys.exit(1)
 
-    # Load or create manifest
-    manifest_dir = os.path.join(args.output_dir, theme.name)
-    manifest_path = os.path.join(manifest_dir, "manifest.json")
+    theme_output_dir = os.path.join(args.output_dir, theme.name)
+    progress_manifest_path = os.path.join(theme_output_dir, ".progress.json")
 
-    if os.path.exists(manifest_path) and not args.force:
-        manifest = Manifest.load(manifest_path)
+    if os.path.exists(progress_manifest_path):
+        manifest = Manifest.load(progress_manifest_path)
     else:
         manifest = Manifest(
-            manifest_path, theme=theme.name,
-            source="athena-crisis", provider=provider_name,
+            progress_manifest_path,
+            theme=theme.name,
+            source="athena-crisis",
+            provider=provider_name,
         )
 
-    # Process assets
     completed = 0
     failed = 0
     skipped = 0
+    provider_params = {
+        "style_reference_count": len(style_reference_paths),
+    }
 
     for i, asset in enumerate(assets, 1):
-        source_hash = file_hash(asset.source_path)
+        fingerprint, metadata = build_asset_fingerprint(
+            asset,
+            theme=theme,
+            provider_name=provider_name,
+            provider_params=provider_params,
+            style_reference_paths=style_reference_paths,
+            palette_only=args.palette_only,
+        )
 
-        # Check manifest for already-completed assets
-        if not args.force and manifest.is_completed(asset.name, source_hash):
+        if not args.force and manifest.is_completed(asset.name, fingerprint):
             skipped += 1
             continue
 
         print(
             f"[{i}/{len(assets)}] {asset.name} ({asset.category})...",
-            end=" ", flush=True,
+            end=" ",
+            flush=True,
         )
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 output_path = process_asset(
-                    asset, theme, provider, args.output_dir,
+                    asset,
+                    theme,
+                    provider,
+                    args.output_dir,
                     palette_only=args.palette_only,
+                    style_reference_paths=style_reference_paths,
                 )
-                manifest.mark_completed(asset.name, source_hash, output_path)
+                manifest.mark_completed(
+                    asset.name,
+                    source_hash=fingerprint,
+                    output_path=output_path,
+                    metadata=metadata,
+                )
                 completed += 1
                 print("OK")
                 break
             except NotImplementedError as e:
-                # Provider not yet implemented
                 manifest.mark_failed(asset.name, str(e))
                 failed += 1
                 print(f"SKIP ({e})")
@@ -310,13 +348,18 @@ def main():
                 else:
                     print(f"retry {attempt}...", end=" ", flush=True)
 
-    # Summary
-    print(f"\n--- Summary ---")
+    runtime_manifest_path = write_runtime_manifest_for_completed_assets(
+        manifest, args.output_dir, theme.name
+    )
+
+    print("\n--- Summary ---")
     print(f"Completed: {completed}")
     print(f"Skipped:   {skipped}")
     print(f"Failed:    {failed}")
     print(f"Total:     {len(assets)}")
-    print(f"Output:    {os.path.join(args.output_dir, theme.name)}")
+    print(f"Output:    {theme_output_dir}")
+    print(f"Progress:  {progress_manifest_path}")
+    print(f"Manifest:  {runtime_manifest_path}")
 
 
 if __name__ == "__main__":

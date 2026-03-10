@@ -193,6 +193,9 @@ class TestStyleSheetInstructionInPrompts:
     def test_multi_anchor_batch_prompt_has_placeholder(self):
         assert "{style_sheet_instruction}" in reskin_tiles.MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE
 
+    def test_preview_anim_batch_prompt_has_placeholder(self):
+        assert "{style_sheet_instruction}" in reskin_tiles.PREVIEW_ANIM_BATCH_PROMPT_TEMPLATE
+
     def test_empty_instruction_produces_clean_prompt(self):
         """When style_sheet_instruction is empty, prompt should not have
         leading whitespace or artifacts."""
@@ -291,6 +294,71 @@ class TestReskinBatchGemini:
             cell_legend="",
             style_sheet_instruction="",
         )
+
+    def test_preview_animation_batches_use_preview_prompt(self, tmp_path, monkeypatch):
+        """Preview-aware animation batches should send preview then atlas target."""
+        batch_path = tmp_path / "batch.png"
+        preview_path = tmp_path / "preview.png"
+        Image.new("RGBA", (24, 24), (10, 20, 30, 255)).save(batch_path)
+        Image.new("RGBA", (48, 48), (40, 50, 60, 255)).save(preview_path)
+
+        seen = {}
+
+        class _FakePart:
+            def __init__(self, data=None, mime_type=None):
+                self.inline_data = types.SimpleNamespace(data=data, mime_type=mime_type)
+
+            @classmethod
+            def from_bytes(cls, data, mime_type):
+                return cls(data=data, mime_type=mime_type)
+
+        class _FakeResponse:
+            def __init__(self):
+                buf = io.BytesIO()
+                Image.new("RGBA", (24, 24), (1, 2, 3, 255)).save(buf, format="PNG")
+                image_part = types.SimpleNamespace(
+                    inline_data=types.SimpleNamespace(data=buf.getvalue(), mime_type="image/png")
+                )
+                self.candidates = [types.SimpleNamespace(content=types.SimpleNamespace(parts=[image_part]))]
+
+        class _FakeModels:
+            def generate_content(self, *, contents, **kwargs):
+                seen["contents"] = contents
+                return _FakeResponse()
+
+        class _FakeClient:
+            def __init__(self, api_key):
+                self.models = _FakeModels()
+
+        fake_genai = types.ModuleType("google.genai")
+        fake_genai.Client = _FakeClient
+        fake_genai.types = types.SimpleNamespace(
+            Part=_FakePart,
+            GenerateContentConfig=lambda **kwargs: kwargs,
+        )
+        fake_google = types.ModuleType("google")
+        fake_google.genai = fake_genai
+
+        monkeypatch.setitem(sys.modules, "google", fake_google)
+        monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+        image = reskin_tiles.reskin_batch_gemini(
+            batch_path=str(batch_path),
+            theme={"prompt": "cozy"},
+            batch_id="anim_preview_test",
+            tile_type="sea_object",
+            anchor_paths=None,
+            is_animation_batch=True,
+            preview_path=str(preview_path),
+        )
+
+        assert image is not None
+        assert seen["contents"][0] == reskin_tiles.PREVIEW_ANIM_BATCH_PROMPT_TEMPLATE.format(
+            cell_legend="",
+            style_sheet_instruction="",
+        )
+        assert len(seen["contents"]) == 3
 
 
 # ---------------------------------------------------------------------------

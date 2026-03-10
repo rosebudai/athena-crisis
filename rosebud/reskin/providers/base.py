@@ -10,7 +10,8 @@ class ReskinProvider:
         Args:
             image_path: Absolute path to the source image.
             prompt: Fully constructed style prompt.
-            params: Additional provider-specific parameters.
+            params: Additional provider-specific parameters. Implementations
+                may support ``reference_image_paths`` for extra style anchors.
 
         Returns:
             Reskinned image as bytes (PNG format).
@@ -21,8 +22,8 @@ class ReskinProvider:
                        output_path: str) -> bool:
         """Transform a grid image containing multiple sprites.
 
-        Used by the batch pipeline (``--batch`` flag) for 4x4 grid
-        restyling.  Override this in providers that support grid mode.
+        This remains available for experimental grid workflows. Override this
+        in providers that support grid mode.
 
         Args:
             grid_path: Path to the input grid PNG.
@@ -34,5 +35,5 @@ class ReskinProvider:
         """
         raise NotImplementedError(
             f"{type(self).__name__} does not support grid mode. "
-            f"Use --batch with fal_gemini or echo provider."
+            f"Grid batching is not part of the normal sprite CLI workflow."
         )

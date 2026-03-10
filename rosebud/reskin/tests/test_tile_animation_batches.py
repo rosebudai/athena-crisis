@@ -36,6 +36,9 @@ class TestAnimationBatches:
             assert len(b["frame_indices"]) > 0
             assert "cells_per_frame" in b, f"Batch {b['batch_id']} missing cells_per_frame"
             assert b["cells_per_frame"] >= 1
+            assert "batch_family" in b, f"Batch {b['batch_id']} missing batch_family"
+            assert "layout_strategy" in b, f"Batch {b['batch_id']} missing layout_strategy"
+            assert b["layout_strategy"] == "frame_strip"
 
     def test_frames_as_columns_layout(self, tmp_path):
         """grid_col in batch cells should correspond to the frame index position
@@ -203,3 +206,32 @@ class TestAnimationBatches:
 
         assert not stale_dir.exists()
         assert not stale_file.exists()
+
+    def test_sea_object_animation_families_get_explicit_batch_families(self, tmp_path):
+        """Sea-object animation families should emit dedicated animation batches."""
+        cells = [
+            _make_cell(5, 22, tmp_path=tmp_path),
+            _make_cell(6, 22, tmp_path=tmp_path),
+            _make_cell(5, 23, tmp_path=tmp_path),
+            _make_cell(6, 23, tmp_path=tmp_path),
+            _make_cell(5, 24, tmp_path=tmp_path),
+            _make_cell(6, 25, tmp_path=tmp_path),
+            _make_cell(6, 27, tmp_path=tmp_path),
+            _make_cell(5, 26, tmp_path=tmp_path),
+            _make_cell(6, 26, tmp_path=tmp_path),
+        ]
+
+        batches = reskin_tiles.build_animation_batches(cells, tmp_path)
+
+        families_by_anim = {b["anim_name"]: b["batch_family"] for b in batches}
+        assert families_by_anim["Iceberg/Weeds"] == "sea_object_iceberg_weeds_anim"
+        assert families_by_anim["Island"] == "sea_object_island_anim"
+        assert families_by_anim["GasBubbles"] == "sea_object_gas_bubbles_anim"
+
+        island_batch = next(b for b in batches if b["anim_name"] == "Island")
+        iceberg_batch = next(b for b in batches if b["anim_name"] == "Iceberg/Weeds")
+        gas_batch = next(b for b in batches if b["anim_name"] == "GasBubbles")
+
+        assert island_batch["cells_per_frame"] == 2
+        assert iceberg_batch["cells_per_frame"] == 2
+        assert gas_batch["cells_per_frame"] == 2

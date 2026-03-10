@@ -3,9 +3,10 @@ from __future__ import annotations
 import math
 import shutil
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from .catalog import (
     ANIMATED_TILES,
@@ -17,6 +18,160 @@ from .catalog import (
     LINE_COLOR,
     TILE_SIZE,
 )
+
+SEA_OBJECT_FRAME_START_COL = 5
+SEA_OBJECT_FRAME_COUNT = 4
+SEA_OBJECT_ROW_METADATA: dict[int, tuple[str, str, int]] = {
+    22: ("sea_object_iceberg_weeds_anim", "Iceberg/Weeds", 0),
+    23: ("sea_object_iceberg_weeds_anim", "Iceberg/Weeds", 1),
+    24: ("sea_object_island_anim", "Island", 0),
+    25: ("sea_object_island_anim", "Island", 1),
+    26: ("sea_object_gas_bubbles_anim", "GasBubbles", 0),
+    27: ("sea_object_gas_bubbles_anim", "GasBubbles", 1),
+}
+@dataclass(frozen=True, slots=True)
+class BatchFamilyPolicy:
+    batch_family: str
+    tile_type: str
+    layout_strategy: str
+    is_animation_batch: bool
+
+
+BATCH_FAMILY_POLICIES: dict[str, BatchFamilyPolicy] = {
+    "sea_object_static": BatchFamilyPolicy(
+        batch_family="sea_object_static",
+        tile_type="sea_object",
+        layout_strategy="packed",
+        is_animation_batch=False,
+    ),
+    "sea_object_island_anim": BatchFamilyPolicy(
+        batch_family="sea_object_island_anim",
+        tile_type="sea_object",
+        layout_strategy="frame_strip",
+        is_animation_batch=True,
+    ),
+    "sea_object_iceberg_weeds_anim": BatchFamilyPolicy(
+        batch_family="sea_object_iceberg_weeds_anim",
+        tile_type="sea_object",
+        layout_strategy="frame_strip",
+        is_animation_batch=True,
+    ),
+    "sea_object_gas_bubbles_anim": BatchFamilyPolicy(
+        batch_family="sea_object_gas_bubbles_anim",
+        tile_type="sea_object",
+        layout_strategy="frame_strip",
+        is_animation_batch=True,
+    ),
+}
+
+
+def _slugify_batch_family(value: str) -> str:
+    return value.lower().replace("/", "_").replace(" ", "_")
+
+
+def assign_batch_family(cell: dict) -> str:
+    """Return the semantic batch family for a cell."""
+    tile_type = cell["type"]
+    anim_name = cell.get("anim_name")
+
+    if tile_type == "sea_object":
+        metadata = SEA_OBJECT_ROW_METADATA.get(cell["row"])
+        if metadata is not None:
+            return metadata[0]
+        return "sea_object_static"
+
+    if anim_name:
+        return f"anim_{_slugify_batch_family(anim_name)}"
+
+    return tile_type
+
+
+def get_batch_family_policy(cell: dict) -> BatchFamilyPolicy:
+    """Resolve layout/animation policy for a cell's assigned family."""
+    batch_family = cell.get("batch_family") or assign_batch_family(cell)
+    policy = BATCH_FAMILY_POLICIES.get(batch_family)
+    if policy is not None:
+        return policy
+
+    if cell.get("anim_name"):
+        return BatchFamilyPolicy(
+            batch_family=batch_family,
+            tile_type=cell["type"],
+            layout_strategy="frame_strip",
+            is_animation_batch=True,
+        )
+
+    return BatchFamilyPolicy(
+        batch_family=batch_family,
+        tile_type=cell["type"],
+        layout_strategy="packed",
+        is_animation_batch=False,
+    )
+
+
+def _annotate_cells_for_batching(cells: list[dict]) -> list[dict]:
+    annotated: list[dict] = []
+    for cell in cells:
+        enriched = dict(cell)
+        if enriched["type"] == "sea_object":
+            metadata = SEA_OBJECT_ROW_METADATA.get(enriched["row"])
+            if metadata is not None:
+                batch_family, anim_name, cell_idx = metadata
+                frame_idx = enriched["col"] - SEA_OBJECT_FRAME_START_COL
+                if 0 <= frame_idx < SEA_OBJECT_FRAME_COUNT:
+                    enriched["batch_family"] = batch_family
+                    enriched["anim_name"] = anim_name
+                    enriched["anim_frame_idx"] = frame_idx
+                    enriched["anim_cell_idx"] = cell_idx
+                    enriched["layout_strategy"] = "frame_strip"
+        policy = get_batch_family_policy(enriched)
+        enriched["batch_family"] = policy.batch_family
+        enriched["layout_strategy"] = policy.layout_strategy
+        annotated.append(enriched)
+    return annotated
+
+
+def _packed_grid_positions(batch_cells: list[dict]) -> tuple[int, int, list[tuple[dict, int, int]]]:
+    """Return dense left-to-right packed placements for a batch."""
+    n = len(batch_cells)
+    cols = min(GRID_COLS, n)
+    rows = math.ceil(n / GRID_COLS)
+    placements = []
+    for idx, cell in enumerate(batch_cells):
+        row = idx // GRID_COLS
+        col = idx % GRID_COLS
+        placements.append((cell, col, row))
+    return cols, rows, placements
+
+
+def _static_grid_positions(batch_cells: list[dict]) -> tuple[int, int, list[tuple[dict, int, int]]]:
+    """Preserve atlas-local row/column offsets for a batch."""
+    if batch_cells:
+        min_col = min(cell["col"] for cell in batch_cells)
+        max_col = max(cell["col"] for cell in batch_cells)
+        min_row = min(cell["row"] for cell in batch_cells)
+        max_row = max(cell["row"] for cell in batch_cells)
+        placements = [
+            (cell, cell["col"] - min_col, cell["row"] - min_row)
+            for cell in sorted(batch_cells, key=lambda c: (c["row"], c["col"]))
+        ]
+        cols = max_col - min_col + 1
+        rows = max_row - min_row + 1
+        return cols, rows, placements
+
+    return 0, 0, []
+
+
+def _grid_positions_for_layout(
+    layout_strategy: str,
+    batch_cells: list[dict],
+) -> tuple[int, int, list[tuple[dict, int, int]]]:
+    if layout_strategy == "packed":
+        return _packed_grid_positions(batch_cells)
+    if layout_strategy == "static_grid":
+        return _static_grid_positions(batch_cells)
+    raise ValueError(f"Unsupported typed layout strategy: {layout_strategy}")
+
 
 def _partition_cells_for_batching(
     cells: list[dict],
@@ -31,12 +186,13 @@ def _partition_cells_for_batching(
     anim_cells: dict[str, dict[int, list[dict]]] = defaultdict(lambda: defaultdict(list))
     excluded = 0
 
-    for cell in cells:
-        anim_name = cell.get("anim_name")
-        if anim_name is not None:
+    for cell in _annotate_cells_for_batching(cells):
+        policy = get_batch_family_policy(cell)
+        if policy.is_animation_batch:
             excluded += 1
+            anim_name = cell.get("anim_name")
             frame_idx = cell.get("anim_frame_idx")
-            if frame_idx is not None:
+            if anim_name is not None and frame_idx is not None:
                 anim_cells[anim_name][frame_idx].append(cell)
             continue
 
@@ -63,8 +219,8 @@ def _partition_cells_for_batching(
 def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
     """Group cells by terrain type, then batch into 6x6 grids.
 
-    ALL animation cells (base + non-base frames) are excluded from type
-    batching.  They are handled separately by build_animation_batches().
+    Type batches are driven by explicit semantic ``batch_family`` assignments
+    instead of raw ``tile_type`` alone.
     """
     batches_dir = work_dir / "batches"
     batches_dir.mkdir(exist_ok=True)
@@ -78,9 +234,9 @@ def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
     if excluded:
         print(f"  Excluded {excluded} animation cells from type batching (handled by animation batches)")
 
-    by_type = defaultdict(list)
+    by_family = defaultdict(list)
     for c in batchable:
-        by_type[c["type"]].append(c)
+        by_family[c["batch_family"]].append(c)
 
     cell_w = TILE_SIZE + CELL_PADDING * 2
     cell_h = TILE_SIZE + CELL_PADDING * 2
@@ -88,13 +244,15 @@ def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
     batches = []
     batch_counter = 0
 
-    for tile_type in sorted(by_type.keys()):
-        type_cells = by_type[tile_type]
-        for chunk_idx in range(0, len(type_cells), CELLS_PER_BATCH):
-            batch_cells = type_cells[chunk_idx:chunk_idx + CELLS_PER_BATCH]
-            n = len(batch_cells)
-            cols = min(GRID_COLS, n)
-            rows = math.ceil(n / GRID_COLS)
+    for batch_family in sorted(by_family.keys()):
+        family_cells = by_family[batch_family]
+        family_policy = get_batch_family_policy(family_cells[0])
+        tile_type = family_policy.tile_type
+        layout_strategy = family_policy.layout_strategy
+
+        for chunk_idx in range(0, len(family_cells), CELLS_PER_BATCH):
+            batch_cells = family_cells[chunk_idx:chunk_idx + CELLS_PER_BATCH]
+            cols, rows, placements = _grid_positions_for_layout(layout_strategy, batch_cells)
 
             canvas_w = cols * cell_w + (cols + 1) * GRID_LINE_WIDTH
             canvas_h = rows * cell_h + (rows + 1) * GRID_LINE_WIDTH
@@ -102,10 +260,12 @@ def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
             canvas = Image.new("RGBA", (canvas_w, canvas_h), LINE_COLOR)
             draw = ImageDraw.Draw(canvas)
 
-            batch_id = f"batch_{batch_counter:03d}_{tile_type}"
+            batch_id = f"batch_{batch_counter:03d}_{batch_family}"
             batch_meta = {
                 "batch_id": batch_id,
                 "tile_type": tile_type,
+                "batch_family": batch_family,
+                "layout_strategy": layout_strategy,
                 "cols": cols,
                 "rows": rows,
                 "canvas_w": canvas_w,
@@ -115,10 +275,7 @@ def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
                 "cells": [],
             }
 
-            for idx, cell_info in enumerate(batch_cells):
-                row = idx // GRID_COLS
-                col = idx % GRID_COLS
-
+            for cell_info, col, row in placements:
                 cx = GRID_LINE_WIDTH + col * (cell_w + GRID_LINE_WIDTH)
                 cy = GRID_LINE_WIDTH + row * (cell_h + GRID_LINE_WIDTH)
 
@@ -153,13 +310,13 @@ def create_typed_batches(cells: list[dict], work_dir: Path) -> list[dict]:
             batch_counter += 1
 
     # Summary
-    type_batch_counts = {}
+    type_batch_counts: dict[str, int] = {}
     for b in batches:
-        t = b["tile_type"]
-        type_batch_counts[t] = type_batch_counts.get(t, 0) + 1
-    print(f"  Created {len(batches)} batches grouped by type:")
-    for t in sorted(type_batch_counts.keys()):
-        print(f"    {t}: {type_batch_counts[t]} batches")
+        family = b["batch_family"]
+        type_batch_counts[family] = type_batch_counts.get(family, 0) + 1
+    print(f"  Created {len(batches)} batches grouped by family:")
+    for family in sorted(type_batch_counts.keys()):
+        print(f"    {family}: {type_batch_counts[family]} batches")
 
     return batches
 
@@ -188,6 +345,10 @@ def build_animation_batches(cells: list[dict], work_dir: Path) -> list[dict]:
     """
     batches_dir = work_dir / "batches"
     batches_dir.mkdir(exist_ok=True)
+    preview_dir = work_dir / "batch_previews"
+    if preview_dir.exists():
+        shutil.rmtree(preview_dir)
+    preview_dir.mkdir(exist_ok=True)
 
     for stale_path in work_dir.glob("anim_*"):
         if stale_path.is_dir():
@@ -206,7 +367,6 @@ def build_animation_batches(cells: list[dict], work_dir: Path) -> list[dict]:
     cell_h = TILE_SIZE + CELL_PADDING * 2
 
     _, anim_cells_by_name, _ = _partition_cells_for_batching(cells)
-
     batches = []
     MAX_FRAMES_PER_BATCH = 6
     MAX_ROWS_PER_BATCH = 20  # Gemini fails on very tall grids (e.g. Pier at 35 rows)
@@ -278,6 +438,8 @@ def build_animation_batches(cells: list[dict], work_dir: Path) -> list[dict]:
                 else:
                     batch_id = f"anim_{safe_name}_{sub_idx}"
                 batch_cells = []
+                first_frame_cells = next((frame_cells for frame_cells in frames if frame_cells), [])
+                family_policy = get_batch_family_policy(first_frame_cells[0])
 
                 for grid_col_idx, frame_idx in enumerate(frame_indices):
                     frame_cell_list = frames[frame_idx] if frame_idx < len(frames) else []
@@ -338,6 +500,8 @@ def build_animation_batches(cells: list[dict], work_dir: Path) -> list[dict]:
                 batch_meta = {
                     "batch_id": batch_id,
                     "tile_type": tile_type,
+                    "batch_family": family_policy.batch_family,
+                    "layout_strategy": family_policy.layout_strategy,
                     "cols": n_cols,
                     "rows": n_rows,
                     "canvas_w": canvas_w,
@@ -361,4 +525,3 @@ def build_animation_batches(cells: list[dict], work_dir: Path) -> list[dict]:
               f"{b['cells_per_frame']} cells/frame")
 
     return batches
-

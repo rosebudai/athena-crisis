@@ -140,8 +140,9 @@ MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE = (
     "{style_sheet_instruction}"
     "Reskin the tiles in the last image to match the visual style of the reference images. "
     "The main reference shows the target style for {type_name} tiles. "
-    "Additional references show context colors — match water portions to any water "
-    "reference and grass/land portions to any grass reference exactly. "
+    "Additional references show boundary-condition context — match water surfaces to the "
+    "water-like references, grass/land portions to the land references, and any built or "
+    "border structure surfaces to the closest matching structure reference. "
     "These are {type_name} game tiles, top-down orthogonal perspective. "
     "Target style: {theme_prompt}. "
     "{type_hint} "
@@ -152,7 +153,7 @@ MULTI_ANCHOR_BATCH_PROMPT_TEMPLATE = (
     "3) No text, labels, or watermarks. "
     "4) Keep black grid lines and gray padding as-is. "
     "5) Match the reference images' palettes and shading exactly. "
-    "6) Use the reference grass/land colors for any land portions."
+    "6) Use the correct reference family for each visible surface so transitions stay coherent across tile edges."
 )
 
 ANIM_BATCH_PROMPT_TEMPLATE = (
@@ -167,5 +168,22 @@ ANIM_BATCH_PROMPT_TEMPLATE = (
     "3) Maintain exact transparency — do not fill transparent areas.\n"
     "4) Match the anchor tile's palette and shading.\n"
     "5) Keep the same grid layout — same number of rows and columns.\n"
+    "{cell_legend}"
+)
+
+PREVIEW_ANIM_BATCH_PROMPT_TEMPLATE = (
+    "{style_sheet_instruction}"
+    "Reskin the atlas-target pieces in the last image. "
+    "The second-to-last image shows composed preview tiles for the same animation frames. "
+    "Use that preview image to understand what each frame should look like as a complete object, "
+    "but paint the result into the exact atlas-piece layout of the last image. "
+    "Each column represents one frame of a looping animation. "
+    "CRITICAL: Preserve the motion differences between frames. "
+    "Rules:\n"
+    "1) The second-to-last image is semantic preview context. The last image is the exact output layout.\n"
+    "2) Keep the last image's grid layout, tile positions, transparency, and piece boundaries exactly unchanged.\n"
+    "3) Match the preview image's object shapes and visible surfaces while preserving frame-to-frame motion.\n"
+    "4) Maintain exact transparency — do not fill transparent areas.\n"
+    "5) Match the anchor and style reference palettes and shading.\n"
     "{cell_legend}"
 )

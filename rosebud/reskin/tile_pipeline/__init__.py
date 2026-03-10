@@ -3,7 +3,7 @@ from __future__ import annotations
 from . import catalog as _catalog
 from .assemble import reassemble_atlas, update_reskin_manifest
 from .anchors import _extract_plain_tile_from_anchor, generate_anchors, generate_style_reference_sheet
-from .batching import _partition_cells_for_batching, build_animation_batches, create_typed_batches
+from .batching import _partition_cells_for_batching, assign_batch_family, build_animation_batches, create_typed_batches
 from .catalog import *
 from .cli import build_parser, config_from_args, main
 from .debug import _draw_outlined_text, generate_debug_atlas

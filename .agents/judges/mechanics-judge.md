@@ -1,83 +1,94 @@
 # Mechanics Judge — Athena Crisis
 
-Gemini prompt for evaluating whether a screenshot sequence demonstrates correct game behavior per the QA Plan. Called during ① VALIDATE on ordered screenshot sets.
+Use this rubric when Codex reviews screenshot sequences for gameplay
+correctness against a QA Plan.
 
-## Invocation
+This is not a model-specific prompt and it is not a JSON contract. It is a
+shared review standard for human-readable Codex analysis.
 
-Pass screenshots in numbered order (step1.png, step2.png, ...) along with the QA Plan steps as context.
+## Purpose
 
-```bash
-mkdir -p /tmp/gemini-judge-mechanics
-cp /tmp/step*.png /tmp/gemini-judge-mechanics/
+Judge whether an ordered screenshot sequence demonstrates correct game
+behavior for Athena Crisis.
 
-gemini -p "$(cat .claude/judges/mechanics-judge.md)
+This judge is about mechanics and state correctness, not visual polish.
 
-QA PLAN STEPS:
-1. Navigate to http://localhost:4173/ — expect title screen (step1.png)
-2. Click Play — expect level select (step2.png)
-3. Select map, start game — expect game map with units (step3.png)" \
-  -m gemini-3.1-pro-preview \
-  --include-directories /tmp/gemini-judge-mechanics \
-  --yolo --output-format text 2>/dev/null \
-  > /tmp/verdict-mechanics.json
-```
+## Inputs
 
-## Prompt
+When using this rubric, provide Codex:
 
-You are a mechanics quality judge for Athena Crisis, a turn-based strategy game. You are given a sequence of numbered screenshots (step1.png, step2.png, ...) and a QA Plan describing what each step should show. Evaluate whether the screenshots demonstrate correct game behavior.
+- the ordered screenshots, typically `step1.png`, `step2.png`, ...
+- the `QA PLAN STEPS` that say what each screenshot should show
+- optionally `CHANGE UNDER TEST`
+- optionally `KNOWN BASELINE DEBT` if a screen is expected to contain
+  unrelated issues
 
-### Evaluation Criteria
+## Evaluation Rubric
 
-**1. State Correctness (per step)**
-Does each screenshot match the expected state described in the QA Plan? Compare what the QA Plan says should be visible against what is actually visible in the screenshot. Be specific — cite exact text, values, or elements.
+Apply the following checks:
 
-**2. Transitions**
-Do the screenshots show logical progression? If step N says "click Play" and step N+1 should show the level select, does the screenshot confirm the transition happened? Flag any steps where the expected transition didn't occur.
+1. `state_correctness`
+   Does each screenshot match the expected state described in the QA Plan?
+   Cite the specific UI, values, or game state visible in the screenshot.
 
-**3. Data Accuracy**
-If the QA Plan specifies expected values (e.g., "Infantry cost shows 200", "health bar at 50%"), verify these values are visible and correct in the screenshots. Flag any discrepancies between expected and actual values.
+2. `transition_correctness`
+   Do the screenshots show the expected transition from one step to the next?
+   If a step says "click Play", does the next screenshot actually show the
+   level select screen?
 
-**4. Error States**
-Check each screenshot for:
+3. `data_accuracy`
+   If the QA Plan calls out expected values, confirm those values directly from
+   the screenshots. Examples: unit cost, health, selected tile info, menu
+   labels, or map state.
 
-- Blank or white screens
-- Error messages or stack traces
-- Missing UI elements (empty areas where content should be)
-- Broken layouts (overlapping elements, clipped text)
-- Loading spinners that shouldn't still be visible
+4. `error_states`
+   Check each screenshot for obvious failure cases:
+   - blank or white screens
+   - error messages or stack traces
+   - missing UI regions
+   - obviously broken layout or clipping
+   - loading states that should have resolved
 
-**5. Completeness**
-Does the screenshot sequence cover all QA Plan steps? Are any steps missing or skipped? Flag if fewer screenshots were provided than QA Plan steps.
+5. `completeness`
+   Do the provided screenshots cover all QA Plan steps in order?
 
-### Output Format
+## Classification Rules
 
-Respond with ONLY valid JSON, no markdown fences, no extra text:
+Always classify observations into these buckets:
 
-```
-{
-  "pass": false,
-  "steps": [
-    {
-      "step": 1,
-      "description": "Navigate to title screen",
-      "screenshot": "step1.png",
-      "state": "pass",
-      "data": "n/a",
-      "errors": "none"
-    },
-    {
-      "step": 2,
-      "description": "Click Play — level select",
-      "screenshot": "step2.png",
-      "state": "fail",
-      "data": "n/a",
-      "errors": "Screen is blank white — transition did not occur"
-    }
-  ],
-  "transitions": { "pass": false, "evidence": "Step 1→2 transition failed: still on title screen" },
-  "completeness": { "pass": true, "evidence": "3 of 3 steps verified" },
-  "failures": ["Step 2: blank screen after clicking Play — level select did not load"]
-}
-```
+- `mechanics_failures`
+  Screenshot-grounded issues that show the QA Plan did not complete correctly.
 
-`pass` is `true` only if ALL steps pass state + data checks, transitions are logical, and all QA Plan steps are covered. Any single step failure means `pass` is `false`. The `failures` array lists specific issues (empty array if all pass).
+- `mechanics_passes`
+  Steps or transitions that are clearly satisfied by the screenshots.
+
+- `non_blocking_notes`
+  Real observations that do not invalidate the QA Plan step being judged.
+
+## Output Guidance
+
+Codex should return a concise human-readable verdict instead of JSON.
+
+Recommended structure:
+
+1. `Mode`
+   State `mechanics_review`.
+
+2. `Verdict`
+   State pass/fail in plain language.
+
+3. `Blocking Findings`
+   List the specific mechanics failures, if any.
+
+4. `Confirmed Steps`
+   List the steps or transitions clearly supported by the screenshots.
+
+5. `Non-Blocking Notes`
+   Include ambiguity, baseline debt, or out-of-scope observations when useful.
+
+## Failure Rules
+
+- Fail if any QA Plan step is not demonstrated by the screenshots.
+- Fail if the expected transition between steps is not visible.
+- Fail if the screenshots are incomplete for the QA Plan.
+- Do not fail on vague suspicions; findings must be screenshot-grounded.
